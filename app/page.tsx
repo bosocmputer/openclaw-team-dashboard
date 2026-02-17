@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 
 interface Platform {
@@ -107,21 +107,50 @@ function AgentCard({ agent }: { agent: Agent }) {
   );
 }
 
+// 刷新选项
+const REFRESH_OPTIONS = [
+  { label: "手动刷新", value: 0 },
+  { label: "10 秒", value: 10 },
+  { label: "30 秒", value: 30 },
+  { label: "1 分钟", value: 60 },
+  { label: "5 分钟", value: 300 },
+  { label: "10 分钟", value: 600 },
+];
+
 export default function Home() {
   const [data, setData] = useState<ConfigData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
+    setLoading(true);
     fetch("/api/config")
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setError(d.error);
-        else setData(d);
+        else { setData(d); setError(null); }
+        setLastUpdated(new Date().toLocaleTimeString("zh-CN"));
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (error) {
+  // 首次加载
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // 定时刷新
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (refreshInterval > 0) {
+      timerRef.current = setInterval(fetchData, refreshInterval * 1000);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [refreshInterval, fetchData]);
+
+  if (error && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-red-400">加载失败: {error}</p>
@@ -149,12 +178,42 @@ export default function Home() {
             共 {data.agents.length} 个机器人 · 默认模型: {data.defaults.model}
           </p>
         </div>
-        <Link
-          href="/models"
-          className="px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--bg)] text-sm font-medium hover:opacity-90 transition"
-        >
-          查看模型列表 →
-        </Link>
+        <div className="flex items-center gap-3">
+          {/* 刷新控件 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={refreshInterval}
+              onChange={(e) => setRefreshInterval(Number(e.target.value))}
+              className="px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] text-sm text-[var(--text)] cursor-pointer hover:border-[var(--accent)] transition"
+            >
+              {REFRESH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.value === 0 ? "🔄 手动刷新" : `⏱️ ${opt.label}`}
+                </option>
+              ))}
+            </select>
+            {refreshInterval === 0 && (
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="px-3 py-2 rounded-lg bg-[var(--card)] border border-[var(--border)] text-sm hover:border-[var(--accent)] transition disabled:opacity-50"
+              >
+                {loading ? "⏳" : "🔄"}
+              </button>
+            )}
+          </div>
+          {lastUpdated && (
+            <span className="text-xs text-[var(--text-muted)]">
+              更新于 {lastUpdated}
+            </span>
+          )}
+          <Link
+            href="/models"
+            className="px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--bg)] text-sm font-medium hover:opacity-90 transition"
+          >
+            查看模型列表 →
+          </Link>
+        </div>
       </div>
 
       {/* 卡片墙 */}
