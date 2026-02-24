@@ -56,36 +56,55 @@ export function renderTileGrid(
   const tmRows = tileMap.length
   const tmCols = tmRows > 0 ? tileMap[0].length : 0
   const layoutCols = cols ?? tmCols
+  const GRID_STEP = 3 // Draw grid lines every N tiles
 
-  // Floor tiles + wall base color
   for (let r = 0; r < tmRows; r++) {
     for (let c = 0; c < tmCols; c++) {
       const tile = tileMap[r][c]
-
-      // Skip VOID tiles entirely (transparent)
       if (tile === TileType.VOID) continue
 
-      if (tile === TileType.WALL || !useSpriteFloors) {
-        // Wall tiles or fallback: solid color
-        if (tile === TileType.WALL) {
-          const colorIdx = r * layoutCols + c
-          const wallColor = tileColors?.[colorIdx]
-          ctx.fillStyle = wallColor ? wallColorToHex(wallColor) : WALL_COLOR
-        } else {
-          ctx.fillStyle = FALLBACK_FLOOR_COLOR
-        }
+      if (tile === TileType.WALL) {
+        const colorIdx = r * layoutCols + c
+        const wallColor = tileColors?.[colorIdx]
+        ctx.fillStyle = wallColor ? wallColorToHex(wallColor) : WALL_COLOR
         ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s)
         continue
       }
 
-      // Floor tile: get colorized sprite
+      if (!useSpriteFloors) {
+        ctx.fillStyle = FALLBACK_FLOOR_COLOR
+        ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s)
+        continue
+      }
+
+      // Floor tile: use fillRect with colorized color (no seams)
       const colorIdx = r * layoutCols + c
       const color = tileColors?.[colorIdx] ?? { h: 0, s: 0, b: 0, c: 0 }
       const sprite = getColorizedFloorSprite(tile, color)
-      const cached = getCachedSprite(sprite, zoom)
-      ctx.drawImage(cached, offsetX + c * s, offsetY + r * s)
+      const fillColor = sprite[0]?.[0] || FALLBACK_FLOOR_COLOR
+      ctx.fillStyle = fillColor
+      ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s)
     }
   }
+
+  // Subtle grid lines at half-tile intervals (ceramic tile effect)
+  ctx.save()
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)'
+  ctx.lineWidth = 1
+  const halfS = s / 2
+  ctx.beginPath()
+  for (let c = 0; c <= tmCols * 2; c++) {
+    const x = Math.round(offsetX + c * halfS) + 0.5
+    ctx.moveTo(x, offsetY)
+    ctx.lineTo(x, offsetY + tmRows * s)
+  }
+  for (let r = 0; r <= tmRows * 2; r++) {
+    const y = Math.round(offsetY + r * halfS) + 0.5
+    ctx.moveTo(offsetX, y)
+    ctx.lineTo(offsetX + tmCols * s, y)
+  }
+  ctx.stroke()
+  ctx.restore()
 
 }
 

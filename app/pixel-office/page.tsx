@@ -130,7 +130,7 @@ export default function PixelOfficePage() {
       if (zoomRef.current === 0) {
         const mapW = office.layout.cols * TILE_SIZE
         const mapH = office.layout.rows * TILE_SIZE
-        const fitZoom = Math.round(Math.min(width / mapW, height / mapH))
+        const fitZoom = Math.floor(Math.min(width / mapW, height / mapH) * 2) / 2
         zoomRef.current = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, fitZoom))
       }
       const dpr = window.devicePixelRatio || 1
