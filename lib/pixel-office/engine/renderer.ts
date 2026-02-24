@@ -213,7 +213,7 @@ export function renderScene(
     if (ch.label) {
       const labelX = Math.round(offsetX + ch.x * zoom)
       const labelY = drawY - 2 * zoom
-      const fontSize = Math.max(8, Math.round(3.5 * zoom))
+      const fontSize = Math.max(12, Math.round(5.25 * zoom))
       drawables.push({
         zY: charZY + 0.1,
         draw: (c) => {
@@ -221,9 +221,9 @@ export function renderScene(
           c.font = `bold ${fontSize}px sans-serif`
           c.textAlign = 'center'
           c.textBaseline = 'bottom'
-          c.fillStyle = 'rgba(0,0,0,0.6)'
+          c.fillStyle = 'rgba(0,0,0,0.9)'
           c.fillText(ch.label, labelX, labelY + 1)
-          c.fillStyle = '#fff'
+          c.fillStyle = '#FFD700'
           c.fillText(ch.label, labelX, labelY)
           c.restore()
         },
