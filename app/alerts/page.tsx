@@ -344,7 +344,7 @@ export default function AlertsPage() {
                     </p>
                   </div>
                 </div>
-                {rule.threshold !== undefined && (
+                {rule.threshold !== undefined && rule.id !== "bot_no_response" && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-[var(--text-muted)]">
                       {rule.id === "bot_no_response" ? (locale === "zh" ? "超时 (秒):" : "Timeout (s):") : 
@@ -361,9 +361,25 @@ export default function AlertsPage() {
                     />
                   </div>
                 )}
-                {/* bot_no_response 规则：选择要检测的机器人 */}
-                {rule.id === "bot_no_response" && rule.enabled && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                {rule.id === "bot_no_response" && rule.threshold !== undefined && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {locale === "zh" ? "超时 (秒):" : "Timeout (s):"}
+                    </span>
+                    <input
+                      type="number"
+                      value={rule.threshold}
+                      onChange={(e) => handleThresholdChange(rule.id, Number(e.target.value))}
+                      disabled={!config.enabled || !rule.enabled || saving}
+                      className="w-20 px-2 py-1 text-sm rounded border border-[var(--border)] bg-[var(--card)] text-[var(--text)] disabled:opacity-50"
+                    />
+                  </div>
+                )}
+              </div>
+              {/* bot_no_response 规则：选择要检测的机器人 */}
+              {rule.id === "bot_no_response" && rule.enabled && (
+                <div className="mt-3 pt-3 border-t border-[var(--border)]">
+                  <div className="flex flex-wrap gap-2 items-center">
                     <span className="text-xs text-[var(--text-muted)]">
                       {locale === "zh" ? "检测机器人:" : "Monitor:"}
                     </span>
@@ -377,7 +393,6 @@ export default function AlertsPage() {
                             const newAgents = selected
                               ? currentAgents.filter((id) => id !== agent.id)
                               : [...currentAgents, agent.id];
-                            // 如果原来是空的或undefined，默认全选
                             const finalAgents = newAgents.length === 0 && !rule.targetAgents 
                               ? agents.map(a => a.id)
                               : newAgents;
@@ -414,8 +429,8 @@ export default function AlertsPage() {
                       {locale === "zh" ? "(不选则检测所有)" : "(empty = all)"}
                     </span>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
