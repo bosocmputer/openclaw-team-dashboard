@@ -91,7 +91,7 @@ function getFeishuAccountForAgent(agentId: string, feishuConfig: any, bindings: 
 // 获取 agent 最近的发过消息的飞书用户
 function getFeishuDmUser(agentId: string): string | null {
   try {
-    const sessionsPath = path.join(OPENCLAW_HOME, `agents/${agentId}/sessions/sessions.json`);
+    const sessionsPath = path.join(OPENCLAW_HOME, `agents/${agentId}/sessions.json`);
     const raw = fs.readFileSync(sessionsPath, "utf-8");
     const sessions = JSON.parse(raw);
     let bestId: string | null = null;
@@ -284,7 +284,7 @@ async function checkModelAlerts(config: AlertConfig) {
         const lastAlert = config.lastAlerts?.[`${rule.id}_${provider}_${id}`] || 0;
         const now = Date.now();
         if (now - lastAlert > 60000) {
-          await sendAlert(config.receiveAgent, `模型 ${provider}/${id} 不可用，请检查配置`);
+          await sendAlertViaFeishu(config.receiveAgent, `模型 ${provider}/${id} 不可用，请检查配置`);
           config.lastAlerts = config.lastAlerts || {};
           config.lastAlerts[`${rule.id}_${provider}_${id}`] = now;
         }
@@ -344,7 +344,7 @@ async function checkBotResponseAlerts(config: AlertConfig) {
       
       const lastAlert = config.lastAlerts?.[`${rule.id}_${agentId}`] || 0;
       if (now - lastAlert > 60000) {
-        await sendAlert(config.receiveAgent, `Agent ${agentId} 已 ${mins} 分钟无响应`);
+        await sendAlertViaFeishu(config.receiveAgent, `Agent ${agentId} 已 ${mins} 分钟无响应`);
         config.lastAlerts = config.lastAlerts || {};
         config.lastAlerts[`${rule.id}_${agentId}`] = now;
       }
@@ -377,7 +377,7 @@ async function checkCronAlerts(config: AlertConfig) {
     const lastAlert = config.lastAlerts?.[rule.id] || 0;
     const now = Date.now();
     if (now - lastAlert > 300000) { // 5分钟内不重复
-      await sendAlert(config.receiveAgent, `Cron 连续失败 ${mockCronFailures} 次，请检查定时任务配置`);
+      await sendAlertViaFeishu(config.receiveAgent, `Cron 连续失败 ${mockCronFailures} 次，请检查定时任务配置`);
       config.lastAlerts = config.lastAlerts || {};
       config.lastAlerts[rule.id] = now;
     }
