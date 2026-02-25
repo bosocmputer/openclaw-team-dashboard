@@ -38,7 +38,59 @@ import {
   SELECTION_HIGHLIGHT_COLOR,
   DELETE_BUTTON_BG,
   ROTATE_BUTTON_BG,
+  HEATMAP_CELL_SIZE,
+  HEATMAP_CELL_GAP,
+  HEATMAP_BOTTOM_MARGIN,
 } from '../constants'
+
+// ── GitHub Contribution Heatmap ─────────────────────────────────
+
+export interface ContributionDay { count: number; date: string }
+export interface ContributionWeek { days: ContributionDay[] }
+export interface ContributionData { weeks: ContributionWeek[]; username: string }
+
+const HEATMAP_COLORS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
+
+function contributionLevel(count: number): number {
+  if (count === 0) return 0
+  if (count <= 3) return 1
+  if (count <= 6) return 2
+  if (count <= 9) return 3
+  return 4
+}
+
+function renderContributionHeatmap(
+  ctx: CanvasRenderingContext2D,
+  data: ContributionData,
+  offsetX: number, offsetY: number, zoom: number,
+): void {
+  if (!data.weeks.length) return
+  const tileW = TILE_SIZE * zoom
+  // Draw 52×7 heatmap grid across left room top wall (row 0, cols 1-9)
+  const areaX = offsetX + 1 * tileW
+  const areaW = 9 * tileW
+  const areaH = tileW
+  const areaY = offsetY  // row 0 top edge
+  // Calculate cell size to fit 52 cols × 7 rows with 1px gaps
+  const gapPx = Math.max(0.5, 0.5 * zoom)
+  const cellW = (areaW - (data.weeks.length - 1) * gapPx) / data.weeks.length
+  const cellH = (areaH - 6 * gapPx) / 7
+
+  // Fill background so gaps between cells are consistent
+  ctx.fillStyle = HEATMAP_COLORS[0]
+  ctx.fillRect(Math.round(areaX), Math.round(areaY), Math.round(areaW), Math.round(areaH))
+
+  for (let w = 0; w < data.weeks.length; w++) {
+    const week = data.weeks[w]
+    for (let d = 0; d < week.days.length; d++) {
+      const level = contributionLevel(week.days[d].count)
+      ctx.fillStyle = HEATMAP_COLORS[level]
+      const x = areaX + w * (cellW + gapPx)
+      const y = areaY + d * (cellH + gapPx)
+      ctx.fillRect(Math.round(x), Math.round(y), Math.ceil(cellW), Math.ceil(cellH))
+    }
+  }
+}
 
 // ── Render functions ────────────────────────────────────────────
 
@@ -636,6 +688,7 @@ export function renderFrame(
   tileColors?: Array<FloorColor | null>,
   layoutCols?: number,
   layoutRows?: number,
+  contributions?: ContributionData,
 ): { offsetX: number; offsetY: number } {
   // Clear
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
@@ -670,6 +723,11 @@ export function renderFrame(
   const selectedId = selection?.selectedAgentId ?? null
   const hoveredId = selection?.hoveredAgentId ?? null
   renderScene(ctx, allFurniture, characters, offsetX, offsetY, zoom, selectedId, hoveredId)
+
+  // GitHub contribution heatmap (on top wall of left room)
+  if (contributions && contributions.weeks.length > 0) {
+    renderContributionHeatmap(ctx, contributions, offsetX, offsetY, zoom)
+  }
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { OfficeState } from '@/lib/pixel-office/engine/officeState'
 import { renderFrame } from '@/lib/pixel-office/engine/renderer'
 import type { EditorRenderState } from '@/lib/pixel-office/engine/renderer'
+import type { ContributionData } from '@/lib/pixel-office/engine/renderer'
 import { syncAgentsToOffice, AgentActivity } from '@/lib/pixel-office/agentBridge'
 import { EditorState } from '@/lib/pixel-office/editor/editorState'
 import {
@@ -68,6 +69,7 @@ export default function PixelOfficePage() {
 
   const [agents, setAgents] = useState<AgentActivity[]>([])
   const [hoveredAgentId, setHoveredAgentId] = useState<number | null>(null)
+  const contributionsRef = useRef<ContributionData | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [soundOn, setSoundOn] = useState(true)
   const [editorTick, setEditorTick] = useState(0)
@@ -177,7 +179,8 @@ export default function PixelOfficePage() {
         renderFrame(ctx, width, height, office.tileMap, office.furniture, office.getCharacters(),
           zoomRef.current, panRef.current.x, panRef.current.y,
           { selectedAgentId: null, hoveredAgentId, hoveredTile: null, seats: office.seats, characters: office.characters },
-          editorRender, office.layout.tileColors, office.layout.cols, office.layout.rows)
+          editorRender, office.layout.tileColors, office.layout.cols, office.layout.rows,
+          contributionsRef.current ?? undefined)
       }
       animationFrameIdRef.current = requestAnimationFrame(render)
     }
@@ -186,6 +189,17 @@ export default function PixelOfficePage() {
       if (animationFrameIdRef.current !== null) cancelAnimationFrame(animationFrameIdRef.current)
     }
   }, [hoveredAgentId, editorTick, officeReady])
+
+  // Generate mock GitHub contribution heatmap data (once on mount)
+  useEffect(() => {
+    const weeks = Array.from({ length: 52 }, () => ({
+      days: Array.from({ length: 7 }, () => ({
+        count: Math.random() < 0.25 ? 0 : Math.floor(Math.random() * 12),
+        date: '',
+      })),
+    }))
+    contributionsRef.current = { weeks, username: 'mock' }
+  }, [])
 
   // Poll for agent activity + sound notification
   useEffect(() => {
