@@ -16,6 +16,7 @@ interface AlertRule {
 interface AlertConfig {
   enabled: boolean;
   receiveAgent: string;
+  checkInterval: number;
   rules: AlertRule[];
   lastAlerts?: Record<string, number>;
 }
@@ -27,7 +28,12 @@ function getAlertConfig(): AlertConfig {
       return JSON.parse(raw);
     }
   } catch {}
-  return { enabled: false, receiveAgent: "main", rules: [], lastAlerts: {} };
+  return { enabled: false, receiveAgent: "main", checkInterval: 10, rules: [
+    { id: "model_unavailable", name: "Model Unavailable", enabled: false },
+    { id: "bot_no_response", name: "Bot Long Time No Response", enabled: false, threshold: 300 },
+    { id: "message_failure_rate", name: "Message Failure Rate High", enabled: false, threshold: 50 },
+    { id: "cron连续_failure", name: "Cron Continuous Failure", enabled: false, threshold: 3 },
+  ], lastAlerts: {} };
 }
 
 function getOpenclawConfig() {
@@ -41,6 +47,10 @@ function getOpenclawConfig() {
 }
 
 function saveAlertConfig(config: AlertConfig): void {
+  const dir = path.dirname(ALERTS_CONFIG_PATH);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
   fs.writeFileSync(ALERTS_CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 

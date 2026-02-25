@@ -61,10 +61,30 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    // 读取现有配置
+    const body = await request.json();
     const config = getAlertConfig();
+
+    if (body.enabled !== undefined) config.enabled = body.enabled;
+    if (body.receiveAgent) config.receiveAgent = body.receiveAgent;
+    if (body.checkInterval !== undefined) config.checkInterval = body.checkInterval;
+    if (body.rules) {
+      for (const newRule of body.rules) {
+        const existingRule = config.rules.find(r => r.id === newRule.id);
+        if (existingRule) {
+          existingRule.enabled = newRule.enabled;
+          if (newRule.threshold !== undefined) {
+            existingRule.threshold = newRule.threshold;
+          }
+          if (newRule.targetAgents !== undefined) {
+            existingRule.targetAgents = newRule.targetAgents;
+          }
+        }
+      }
+    }
+
+    saveAlertConfig(config);
     return NextResponse.json(config);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
