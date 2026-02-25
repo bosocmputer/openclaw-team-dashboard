@@ -7,6 +7,10 @@ const OPENCLAW_HOME = process.env.OPENCLAW_HOME || path.join(process.env.HOME ||
 const CONFIG_PATH = path.join(OPENCLAW_HOME, "openclaw.json");
 const OPENCLAW_DIR = OPENCLAW_HOME;
 
+// 30秒内存缓存
+let configCache: { data: any; ts: number } | null = null;
+const CACHE_TTL_MS = 30_000;
+
 // 从配置的 allowFrom 读取用户 id，用于构建 session key
 
 // 读取 agent 的 session 状态（最近活跃时间、token 用量）- 从 jsonl 文件解析
@@ -39,7 +43,12 @@ function getAgentSessionStatus(agentId: string): SessionStatus {
   
   let files: string[];
   try {
-    files = fs.readdirSync(sessionsDir).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
+    const allFiles = fs.readdirSync(sessionsDir).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
+    // 只读最近7天修改过的文件
+    const cutoff = Date.now() - 7 * 86400000;
+    files = allFiles.filter(f => {
+      try { return fs.statSync(path.join(sessionsDir, f)).mtimeMs >= cutoff; } catch { return false; }
+    });
   } catch { return result; }
 
   // 使用 Set 来统计唯一的 session
@@ -88,21 +97,20 @@ function getAgentSessionStatus(agentId: string): SessionStatus {
       }
     }
     
-    // 计算过去7天的响应时间
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role !== "user") continue;
-      const msgDate = messages[i].ts.slice(0, 10);
-      if (!dailyResponseTimes[msgDate]) continue;
-      for (let j = i + 1; j < messages.length; j++) {
-        if (messages[j].role === "assistant" && messages[j].stopReason === "stop") {
-          const userTs = new Date(messages[i].ts).getTime();
-          const assistTs = new Date(messages[j].ts).getTime();
-          const diffMs = assistTs - userTs;
+    // O(n) 响应时间计算：跟踪最近的 user 消息，匹配下一个 assistant stop
+    let lastUserTs: string | null = null;
+    for (const msg of messages) {
+      if (msg.role === "user") {
+        lastUserTs = msg.ts;
+      } else if (msg.role === "assistant" && msg.stopReason === "stop" && lastUserTs) {
+        const msgDate = lastUserTs.slice(0, 10);
+        if (dailyResponseTimes[msgDate]) {
+          const diffMs = new Date(msg.ts).getTime() - new Date(lastUserTs).getTime();
           if (diffMs > 0 && diffMs < 600000) {
             dailyResponseTimes[msgDate].push(diffMs);
           }
-          break;
         }
+        lastUserTs = null;
       }
     }
   }
@@ -128,13 +136,12 @@ interface GroupChat {
   channel: string;
 }
 
-function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: string; name: string }>, feishuAgentIds: string[]): GroupChat[] {
+function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: string; name: string }>, feishuAgentIds: string[], sessionsMap: Map<string, any>): GroupChat[] {
   const groupAgents: Record<string, { agents: Set<string>; channel: string }> = {};
   for (const agentId of agentIds) {
     try {
-      const sessionsPath = path.join(OPENCLAW_DIR, `agents/${agentId}/sessions/sessions.json`);
-      const raw = fs.readFileSync(sessionsPath, "utf-8");
-      const sessions = JSON.parse(raw);
+      const sessions = sessionsMap.get(agentId);
+      if (!sessions) continue;
       for (const key of Object.keys(sessions)) {
         // 匹配群聊 session: agent:{id}:feishu:group:{groupId} 或 agent:{id}:discord:channel:{channelId}
         const feishuGroup = key.match(/^agent:[^:]+:feishu:group:(.+)$/);
@@ -163,13 +170,12 @@ function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: str
 }
 
 // 从 OpenClaw sessions 文件获取每个 agent 最近活跃的飞书 DM session 的用户 open_id
-function getFeishuUserOpenIds(agentIds: string[]): Record<string, string> {
+function getFeishuUserOpenIds(agentIds: string[], sessionsMap: Map<string, any>): Record<string, string> {
   const map: Record<string, string> = {};
   for (const agentId of agentIds) {
     try {
-      const sessionsPath = path.join(OPENCLAW_DIR, `agents/${agentId}/sessions/sessions.json`);
-      const raw = fs.readFileSync(sessionsPath, "utf-8");
-      const sessions = JSON.parse(raw);
+      const sessions = sessionsMap.get(agentId);
+      if (!sessions) continue;
       let best: { openId: string; updatedAt: number } | null = null;
       for (const [key, val] of Object.entries(sessions)) {
         const m = key.match(/^agent:[^:]+:feishu:direct:(ou_[a-f0-9]+)$/);
@@ -210,6 +216,11 @@ function readIdentityName(agentId: string, agentDir?: string, workspace?: string
 }
 
 export async function GET() {
+  // 命中缓存直接返回
+  if (configCache && Date.now() - configCache.ts < CACHE_TTL_MS) {
+    return NextResponse.json(configCache.data);
+  }
+
   try {
     const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
     const config = JSON.parse(raw);
@@ -243,9 +254,19 @@ export async function GET() {
       }
     }
 
-    // 从 OpenClaw sessions 文件获取每个 agent 飞书 DM 的用户 open_id
+    // 一次性读取所有 agent 的 sessions.json，避免重复读取
     const agentIds = agentList.map((a: any) => a.id);
-    const feishuUserOpenIds = getFeishuUserOpenIds(agentIds);
+    const sessionsMap = new Map<string, any>();
+    for (const agentId of agentIds) {
+      try {
+        const sessionsPath = path.join(OPENCLAW_DIR, `agents/${agentId}/sessions/sessions.json`);
+        const raw = fs.readFileSync(sessionsPath, "utf-8");
+        sessionsMap.set(agentId, JSON.parse(raw));
+      } catch {}
+    }
+
+    // 从预读的 sessions 数据获取飞书用户 open_id
+    const feishuUserOpenIds = getFeishuUserOpenIds(agentIds, sessionsMap);
     const discordDmAllowFrom = channels.discord?.dm?.allowFrom || [];
 
     // Build a set of agent IDs that have explicit feishu bindings
@@ -327,7 +348,7 @@ export async function GET() {
 
     // 获取群聊信息（传入所有绑定了飞书的 agent id）
     const feishuAgentIds = agentsWithStatus.filter((a: any) => a.platforms.some((p: any) => p.name === "feishu")).map((a: any) => a.id);
-    const groupChats = getGroupChats(agentIds, agentMap, feishuAgentIds);
+    const groupChats = getGroupChats(agentIds, agentMap, feishuAgentIds, sessionsMap);
 
     // 提取模型 providers
     const providers = Object.entries(config.models?.providers || {}).map(
@@ -355,13 +376,15 @@ export async function GET() {
       }
     );
 
-    return NextResponse.json({
+    const data = {
       agents: agentsWithStatus,
       providers,
       defaults: { model: defaultModel, fallbacks },
       gateway: { port: config.gateway?.port || 18789, token: config.gateway?.auth?.token || "" },
       groupChats,
-    });
+    };
+    configCache = { data, ts: Date.now() };
+    return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -4,6 +4,10 @@ import path from "path";
 
 const OPENCLAW_HOME = process.env.OPENCLAW_HOME || path.join(process.env.HOME || "", ".openclaw");
 
+// 30秒内存缓存
+let statsCache: { data: any; ts: number } | null = null;
+const CACHE_TTL_MS = 30_000;
+
 interface DayStat {
   date: string;
   inputTokens: number;
@@ -17,18 +21,22 @@ interface InternalDayStat extends DayStat {
   responseTimes: number[];
 }
 
-function parseAgentSessions(agentId: string): InternalDayStat[] {
+async function parseAgentSessions(agentId: string): Promise<InternalDayStat[]> {
   const sessionsDir = path.join(OPENCLAW_HOME, `agents/${agentId}/sessions`);
   const dayMap: Record<string, InternalDayStat> = {};
 
-  let files: string[];
+  let fileNames: string[];
   try {
-    files = fs.readdirSync(sessionsDir).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
+    fileNames = (await fs.promises.readdir(sessionsDir)).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
   } catch { return []; }
 
-  for (const file of files) {
-    let content: string;
-    try { content = fs.readFileSync(path.join(sessionsDir, file), "utf-8"); } catch { continue; }
+  // 并行读取所有 JSONL 文件
+  const fileContents = await Promise.all(fileNames.map(async (file) => {
+    try { return await fs.promises.readFile(path.join(sessionsDir, file), "utf-8"); } catch { return null; }
+  }));
+
+  for (const content of fileContents) {
+    if (!content) continue;
 
     const lines = content.trim().split("\n");
     const messages: { role: string; ts: string; stopReason?: string }[] = [];
@@ -55,20 +63,21 @@ function parseAgentSessions(agentId: string): InternalDayStat[] {
       }
     }
 
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].role !== "user") continue;
-      for (let j = i + 1; j < messages.length; j++) {
-        if (messages[j].role === "assistant" && messages[j].stopReason === "stop") {
-          const diffMs = new Date(messages[j].ts).getTime() - new Date(messages[i].ts).getTime();
-          if (diffMs > 0 && diffMs < 600000) {
-            const date = messages[i].ts.slice(0, 10);
-            if (!dayMap[date]) {
-              dayMap[date] = { date, inputTokens: 0, outputTokens: 0, totalTokens: 0, messageCount: 0, avgResponseMs: 0, responseTimes: [] };
-            }
-            dayMap[date].responseTimes.push(diffMs);
+    // O(n) 响应时间计算：跟踪最近的 user 消息，匹配下一个 assistant stop
+    let lastUserTs: string | null = null;
+    for (const msg of messages) {
+      if (msg.role === "user") {
+        lastUserTs = msg.ts;
+      } else if (msg.role === "assistant" && msg.stopReason === "stop" && lastUserTs) {
+        const diffMs = new Date(msg.ts).getTime() - new Date(lastUserTs).getTime();
+        if (diffMs > 0 && diffMs < 600000) {
+          const date = lastUserTs.slice(0, 10);
+          if (!dayMap[date]) {
+            dayMap[date] = { date, inputTokens: 0, outputTokens: 0, totalTokens: 0, messageCount: 0, avgResponseMs: 0, responseTimes: [] };
           }
-          break;
+          dayMap[date].responseTimes.push(diffMs);
         }
+        lastUserTs = null;
       }
     }
   }
@@ -107,16 +116,21 @@ function aggregateToWeeklyMonthly(daily: DayStat[]) {
 }
 
 export async function GET() {
+  // 命中缓存直接返回
+  if (statsCache && Date.now() - statsCache.ts < CACHE_TTL_MS) {
+    return NextResponse.json(statsCache.data);
+  }
+
   try {
     const agentsDir = path.join(OPENCLAW_HOME, "agents");
     let agentIds: string[];
     try { agentIds = fs.readdirSync(agentsDir).filter(f => fs.statSync(path.join(agentsDir, f)).isDirectory()); } catch { agentIds = []; }
 
-    // Merge all agents into one dayMap
-    const dayMap: Record<string, InternalDayStat> = {};
+    // 并行处理所有 agent
+    const allAgentDays = await Promise.all(agentIds.map(id => parseAgentSessions(id)));
 
-    for (const agentId of agentIds) {
-      const agentDays = parseAgentSessions(agentId);
+    const dayMap: Record<string, InternalDayStat> = {};
+    for (const agentDays of allAgentDays) {
       for (const ad of agentDays) {
         if (!dayMap[ad.date]) {
           dayMap[ad.date] = { date: ad.date, inputTokens: 0, outputTokens: 0, totalTokens: 0, messageCount: 0, avgResponseMs: 0, responseTimes: [] };
@@ -141,7 +155,9 @@ export async function GET() {
 
     const { weekly, monthly } = aggregateToWeeklyMonthly(daily);
 
-    return NextResponse.json({ daily, weekly, monthly });
+    const data = { daily, weekly, monthly };
+    statsCache = { data, ts: Date.now() };
+    return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

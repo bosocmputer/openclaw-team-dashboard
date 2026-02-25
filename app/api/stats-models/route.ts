@@ -4,6 +4,10 @@ import path from "path";
 
 const OPENCLAW_HOME = process.env.OPENCLAW_HOME || path.join(process.env.HOME || "", ".openclaw");
 
+// 30秒内存缓存
+let statsCache: { data: any; ts: number } | null = null;
+const CACHE_TTL_MS = 30_000;
+
 interface ModelStat {
   modelId: string;
   provider: string;
@@ -19,6 +23,11 @@ interface InternalModelStat extends ModelStat {
 }
 
 export async function GET() {
+  // 命中缓存直接返回
+  if (statsCache && Date.now() - statsCache.ts < CACHE_TTL_MS) {
+    return NextResponse.json(statsCache.data);
+  }
+
   try {
     const agentsDir = path.join(OPENCLAW_HOME, "agents");
     let agentIds: string[];
@@ -28,19 +37,23 @@ export async function GET() {
 
     const modelMap: Record<string, InternalModelStat> = {};
 
-    for (const agentId of agentIds) {
+    // 并行处理所有 agent
+    await Promise.all(agentIds.map(async (agentId) => {
       const sessionsDir = path.join(agentsDir, agentId, "sessions");
-      let files: string[];
+      let fileNames: string[];
       try {
-        files = fs.readdirSync(sessionsDir).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
-      } catch { continue; }
+        fileNames = (await fs.promises.readdir(sessionsDir)).filter(f => f.endsWith(".jsonl") && !f.includes(".deleted."));
+      } catch { return; }
 
-      for (const file of files) {
-        let content: string;
-        try { content = fs.readFileSync(path.join(sessionsDir, file), "utf-8"); } catch { continue; }
+      // 并行读取所有 JSONL 文件
+      const fileContents = await Promise.all(fileNames.map(async (file) => {
+        try { return await fs.promises.readFile(path.join(sessionsDir, file), "utf-8"); } catch { return null; }
+      }));
+
+      for (const content of fileContents) {
+        if (!content) continue;
 
         const lines = content.trim().split("\n");
-        const messages: { role: string; ts: string; stopReason?: string; model?: string; provider?: string }[] = [];
 
         for (const line of lines) {
           let entry: any;
@@ -48,14 +61,6 @@ export async function GET() {
           if (entry.type !== "message") continue;
           const msg = entry.message;
           if (!msg || !entry.timestamp) continue;
-
-          messages.push({
-            role: msg.role,
-            ts: entry.timestamp,
-            stopReason: msg.stopReason,
-            model: msg.model,
-            provider: msg.provider,
-          });
 
           if (msg.role === "assistant" && msg.usage && msg.model) {
             const key = `${msg.provider || "unknown"}/${msg.model}`;
@@ -75,24 +80,28 @@ export async function GET() {
           }
         }
 
-        // Response times per model
-        for (let i = 0; i < messages.length; i++) {
-          if (messages[i].role !== "user") continue;
-          for (let j = i + 1; j < messages.length; j++) {
-            if (messages[j].role === "assistant" && messages[j].stopReason === "stop") {
-              const diffMs = new Date(messages[j].ts).getTime() - new Date(messages[i].ts).getTime();
-              if (diffMs > 0 && diffMs < 600000 && messages[j].model) {
-                const key = `${messages[j].provider || "unknown"}/${messages[j].model}`;
-                if (modelMap[key]) {
-                  modelMap[key].responseTimes.push(diffMs);
-                }
+        // O(n) 响应时间计算
+        let lastUserTs: string | null = null;
+        for (const line of lines) {
+          let entry: any;
+          try { entry = JSON.parse(line); } catch { continue; }
+          if (entry.type !== "message" || !entry.message || !entry.timestamp) continue;
+          const msg = entry.message;
+          if (msg.role === "user") {
+            lastUserTs = entry.timestamp;
+          } else if (msg.role === "assistant" && msg.stopReason === "stop" && lastUserTs && msg.model) {
+            const diffMs = new Date(entry.timestamp).getTime() - new Date(lastUserTs).getTime();
+            if (diffMs > 0 && diffMs < 600000) {
+              const key = `${msg.provider || "unknown"}/${msg.model}`;
+              if (modelMap[key]) {
+                modelMap[key].responseTimes.push(diffMs);
               }
-              break;
             }
+            lastUserTs = null;
           }
         }
       }
-    }
+    }));
 
     const models: ModelStat[] = Object.values(modelMap).map(({ responseTimes, ...rest }) => {
       if (responseTimes.length > 0) {
@@ -101,10 +110,11 @@ export async function GET() {
       return rest;
     });
 
-    // Sort by total tokens descending
     models.sort((a, b) => b.totalTokens - a.totalTokens);
 
-    return NextResponse.json({ models });
+    const data = { models };
+    statsCache = { data, ts: Date.now() };
+    return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
