@@ -2,6 +2,7 @@ import { TileType, TILE_SIZE, CharacterState } from '../types'
 import type { TileType as TileTypeVal, FurnitureInstance, Character, SpriteData, Seat, FloorColor } from '../types'
 import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache'
 import { getCharacterSprites, BUBBLE_PERMISSION_SPRITE, BUBBLE_WAITING_SPRITE } from '../sprites/spriteData'
+import { getCatSprites } from '../sprites/catSprites'
 import { getCharacterSprite } from './characters'
 import { renderMatrixEffect } from './matrixEffect'
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles'
@@ -244,7 +245,7 @@ export function renderScene(
 
   // Characters
   for (const ch of characters) {
-    const sprites = getCharacterSprites(ch.palette, ch.hueShift)
+    const sprites = ch.isCat ? getCatSprites() : getCharacterSprites(ch.palette, ch.hueShift)
     const spriteData = getCharacterSprite(ch, sprites)
     const cached = getCachedSprite(spriteData, zoom)
     // Sitting offset: shift character down when seated so they visually sit in the chair

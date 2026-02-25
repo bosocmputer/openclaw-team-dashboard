@@ -196,4 +196,5 @@ export interface Character {
   matrixEffectTimer: number
   matrixEffectSeeds: number[]
   interactionTarget: { col: number; row: number; facingDir: Direction } | null
+  isCat: boolean
 }

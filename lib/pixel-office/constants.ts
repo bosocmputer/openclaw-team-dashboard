@@ -119,3 +119,8 @@ export const PULSE_ANIMATION_DURATION_SEC = 1.5
 export const HEATMAP_CELL_SIZE = 2
 export const HEATMAP_CELL_GAP = 1
 export const HEATMAP_BOTTOM_MARGIN = 4
+
+// ── Cat ─────────────────────────────────────────────────────
+export const CAT_WANDER_PAUSE_MIN_SEC = 1.0
+export const CAT_WANDER_PAUSE_MAX_SEC = 5.0
+export const CAT_WALK_SPEED_FACTOR = 0.6

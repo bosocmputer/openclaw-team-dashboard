@@ -15,6 +15,9 @@ import {
   INTERACTION_CHANCE,
   INTERACTION_STAY_MIN_SEC,
   INTERACTION_STAY_MAX_SEC,
+  CAT_WANDER_PAUSE_MIN_SEC,
+  CAT_WANDER_PAUSE_MAX_SEC,
+  CAT_WALK_SPEED_FACTOR,
 } from '../constants'
 import type { InteractionPoint } from '../layout/layoutSerializer'
 
@@ -90,6 +93,7 @@ export function createCharacter(
     matrixEffectTimer: 0,
     matrixEffectSeeds: [],
     interactionTarget: null,
+    isCat: false,
   }
 }
 
@@ -103,6 +107,12 @@ export function updateCharacter(
   interactionPoints: InteractionPoint[],
 ): void {
   ch.frameTimer += dt
+
+  // Cat-specific update: always wander, never sit
+  if (ch.isCat) {
+    updateCat(ch, dt, walkableTiles, tileMap, blockedTiles)
+    return
+  }
 
   switch (ch.state) {
     case CharacterState.TYPE: {
@@ -340,6 +350,75 @@ export function getCharacterSprite(ch: Character, sprites: CharacterSprites): Sp
       return sprites.walk[ch.dir][1]
     default:
       return sprites.walk[ch.dir][1]
+  }
+}
+
+/** Cat-specific update: wander continuously, slower speed, no seat */
+function updateCat(
+  ch: Character, dt: number,
+  walkableTiles: Array<{ col: number; row: number }>,
+  tileMap: TileTypeVal[][], blockedTiles: Set<string>,
+): void {
+  const catSpeed = WALK_SPEED_PX_PER_SEC * CAT_WALK_SPEED_FACTOR
+
+  switch (ch.state) {
+    case CharacterState.IDLE: {
+      ch.frame = 0
+      ch.wanderTimer -= dt
+      if (ch.wanderTimer <= 0 && walkableTiles.length > 0) {
+        const target = walkableTiles[Math.floor(Math.random() * walkableTiles.length)]
+        const path = findPath(ch.tileCol, ch.tileRow, target.col, target.row, tileMap, blockedTiles)
+        if (path.length > 0) {
+          ch.path = path
+          ch.moveProgress = 0
+          ch.state = CharacterState.WALK
+          ch.frame = 0
+          ch.frameTimer = 0
+        }
+        ch.wanderTimer = randomRange(CAT_WANDER_PAUSE_MIN_SEC, CAT_WANDER_PAUSE_MAX_SEC)
+      }
+      break
+    }
+    case CharacterState.WALK: {
+      if (ch.frameTimer >= WALK_FRAME_DURATION_SEC) {
+        ch.frameTimer -= WALK_FRAME_DURATION_SEC
+        ch.frame = (ch.frame + 1) % 4
+      }
+      if (ch.path.length === 0) {
+        const center = tileCenter(ch.tileCol, ch.tileRow)
+        ch.x = center.x
+        ch.y = center.y
+        ch.state = CharacterState.IDLE
+        ch.frame = 0
+        ch.frameTimer = 0
+        ch.wanderTimer = randomRange(CAT_WANDER_PAUSE_MIN_SEC, CAT_WANDER_PAUSE_MAX_SEC)
+        break
+      }
+      const nextTile = ch.path[0]
+      ch.dir = directionBetween(ch.tileCol, ch.tileRow, nextTile.col, nextTile.row)
+      ch.moveProgress += (catSpeed / TILE_SIZE) * dt
+      const fromCenter = tileCenter(ch.tileCol, ch.tileRow)
+      const toCenter = tileCenter(nextTile.col, nextTile.row)
+      const t = Math.min(ch.moveProgress, 1)
+      ch.x = fromCenter.x + (toCenter.x - fromCenter.x) * t
+      ch.y = fromCenter.y + (toCenter.y - fromCenter.y) * t
+      if (ch.moveProgress >= 1) {
+        ch.tileCol = nextTile.col
+        ch.tileRow = nextTile.row
+        ch.x = toCenter.x
+        ch.y = toCenter.y
+        ch.path.shift()
+        ch.moveProgress = 0
+      }
+      break
+    }
+    default: {
+      // Cat shouldn't be in TYPE state — reset to IDLE
+      ch.state = CharacterState.IDLE
+      ch.frame = 0
+      ch.frameTimer = 0
+      ch.wanderTimer = randomRange(CAT_WANDER_PAUSE_MIN_SEC, CAT_WANDER_PAUSE_MAX_SEC)
+    }
   }
 }
 

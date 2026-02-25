@@ -48,6 +48,7 @@ export class OfficeState {
   /** Reverse lookup: sub-agent character ID → parent info */
   subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }> = new Map()
   private nextSubagentId = -1
+  private static CAT_ID = -9999
 
   constructor(layout?: OfficeLayout) {
     this.layout = layout || createDefaultLayout()
@@ -58,6 +59,7 @@ export class OfficeState {
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
     this.interactionPoints = getInteractionPoints(this.layout.furniture, this.tileMap, this.blockedTiles)
     this.doorwayTiles = getDoorwayTiles(this.layout)
+    this.spawnCat()
   }
 
   /** Rebuild all derived state from a new layout. Reassigns existing characters.
@@ -278,6 +280,24 @@ export class OfficeState {
       ch.matrixEffectTimer = 0
       ch.matrixEffectSeeds = matrixEffectSeeds()
     }
+    this.characters.set(id, ch)
+  }
+
+  /** Spawn the office cat at a random walkable tile */
+  spawnCat(): void {
+    const id = OfficeState.CAT_ID
+    if (this.characters.has(id)) return
+    const spawn = this.walkableTiles.length > 0
+      ? this.walkableTiles[Math.floor(Math.random() * this.walkableTiles.length)]
+      : { col: 1, row: 1 }
+    const ch = createCharacter(id, 0, null, null, 0)
+    ch.isCat = true
+    ch.tileCol = spawn.col
+    ch.tileRow = spawn.row
+    ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2
+    ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2
+    ch.state = CharacterState.IDLE
+    ch.wanderTimer = 1 + Math.random() * 3
     this.characters.set(id, ch)
   }
 
@@ -695,8 +715,9 @@ export class OfficeState {
   getCharacterAt(worldX: number, worldY: number): number | null {
     const chars = this.getCharacters().sort((a, b) => b.y - a.y)
     for (const ch of chars) {
-      // Skip characters that are despawning
+      // Skip characters that are despawning or cats
       if (ch.matrixEffect === 'despawn') continue
+      if (ch.isCat) continue
       // Character sprite is 16x24, anchored bottom-center
       // Apply sitting offset to match visual position
       const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
