@@ -192,10 +192,13 @@ function PlatformBadge({ platform, agentId, gatewayPort, gatewayToken, t, testRe
     ? "bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:border-blue-400"
     : pName === "telegram"
     ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/40 hover:border-sky-400"
+    : pName === "whatsapp"
+    ? "bg-green-500/20 text-green-300 border border-green-500/30 hover:bg-green-500/40 hover:border-green-400"
     : "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40 hover:border-purple-400";
 
   const label = pName === "feishu" ? t("platform.feishu")
     : pName === "telegram" ? t("platform.telegram")
+    : pName === "whatsapp" ? t("platform.whatsapp")
     : t("platform.discord");
 
   return (

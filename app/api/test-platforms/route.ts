@@ -335,6 +335,95 @@ async function testTelegram(
   }
 }
 
+// Find the most recent whatsapp DM user for a given agent
+function getWhatsappDmUser(agentId: string): string | null {
+  try {
+    const sessionsPath = path.join(OPENCLAW_HOME, `agents/${agentId}/sessions/sessions.json`);
+    const raw = fs.readFileSync(sessionsPath, "utf-8");
+    const sessions = JSON.parse(raw);
+    let bestId: string | null = null;
+    let bestTime = 0;
+    for (const [key, val] of Object.entries(sessions)) {
+      const m = key.match(/^agent:[^:]+:whatsapp:direct:(.+)$/);
+      if (m) {
+        const updatedAt = (val as any).updatedAt || 0;
+        if (updatedAt > bestTime) {
+          bestTime = updatedAt;
+          bestId = m[1];
+        }
+      }
+    }
+    return bestId;
+  } catch {
+    return null;
+  }
+}
+
+async function testWhatsapp(
+  agentId: string,
+  gatewayPort: number,
+  gatewayToken: string,
+  testUserId: string | null
+): Promise<PlatformTestResult> {
+  const startTime = Date.now();
+
+  if (!testUserId) {
+    return {
+      agentId, platform: "whatsapp", ok: false,
+      error: "No WhatsApp DM session found — send a message to the bot first",
+      elapsed: Date.now() - startTime,
+    };
+  }
+
+  try {
+    // WhatsApp has no public Bot API. Use `openclaw message send` CLI
+    // to send a real message via the gateway's WhatsApp Web connection.
+    const now = new Date().toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" });
+    const { execFileSync } = await import("child_process");
+
+    const args = [
+      "message", "send",
+      "--channel", "whatsapp",
+      "-t", testUserId,
+      "--message", `[Platform Test] WhatsApp 联通测试 ✅ (${now})`,
+    ];
+
+    const result = execFileSync("openclaw", args, {
+      timeout: 30000,
+      encoding: "utf-8",
+      env: { ...process.env },
+    });
+
+    const elapsed = Date.now() - startTime;
+
+    // Check for success indicator in output
+    const ok = result.includes("Sent via gateway") || result.includes("Message ID");
+
+    if (ok) {
+      // Extract message ID if present
+      const idMatch = result.match(/Message ID:\s*(\S+)/);
+      const msgId = idMatch ? idMatch[1] : "";
+      return {
+        agentId, platform: "whatsapp", ok: true,
+        detail: `WhatsApp → DM sent to ${testUserId} (${elapsed}ms)${msgId ? ' · ' + msgId : ''}`,
+        elapsed,
+      };
+    } else {
+      return {
+        agentId, platform: "whatsapp", ok: false,
+        error: result.trim().slice(0, 300) || "No success confirmation from openclaw",
+        elapsed,
+      };
+    }
+  } catch (err: any) {
+    return {
+      agentId, platform: "whatsapp", ok: false,
+      error: (err.stderr || err.message || "Unknown error").slice(0, 300),
+      elapsed: Date.now() - startTime,
+    };
+  }
+}
+
 // Agent session test: use Gateway chatCompletions API to send health check
 // When sessionKey is provided, message routes to that session (e.g. feishu DM session)
 async function testAgentSession(agentId: string, sessionKey: string | undefined, gatewayPort: number, gatewayToken: string): Promise<{ agentId: string; ok: boolean; reply?: string; error?: string; elapsed: number }> {
@@ -396,6 +485,11 @@ export async function POST() {
     const discordAllowFrom: string[] = discordConfig.dm?.allowFrom || [];
     const discordTestUser = discordAllowFrom[0] || null;
     const telegramConfig = channels.telegram || {};
+    const whatsappConfig = channels.whatsapp || {};
+
+    // Read gateway config early (needed for WhatsApp test)
+    const gatewayPort = config.gateway?.port || 18789;
+    const gatewayToken = config.gateway?.auth?.token || "";
 
     let agentList = config.agents?.list || [];
     if (agentList.length === 0) {
@@ -449,21 +543,24 @@ export async function POST() {
         const telegramTestUser = getTelegramDmUser(id);
         platformTests.push(testTelegram(id, telegramConfig.botToken, telegramTestUser));
       }
+
+      // WhatsApp: only test once, via gateway
+      if (id === "main" && whatsappConfig && whatsappConfig.enabled !== false) {
+        const whatsappTestUser = getWhatsappDmUser(id);
+        platformTests.push(testWhatsapp(id, gatewayPort, gatewayToken, whatsappTestUser));
+      }
     }
 
     const platformResults = await Promise.all(platformTests);
 
-    // Read gateway config for Phase 2
-    const gatewayPort = config.gateway?.port || 18789;
-    const gatewayToken = config.gateway?.auth?.token || "";
-
     // Phase 2: Agent session tests via chatCompletions API (sequential)
-    // Uses x-openclaw-session-key to route messages to feishu DM sessions
+    // Routes messages to platform DM sessions (feishu, whatsapp, etc.)
     const agentResults: PlatformTestResult[] = [];
     for (const id of agentIds) {
-      const dmUser = getFeishuDmUser(id);
-      const sessionKey = dmUser ? `agent:${id}:feishu:direct:${dmUser}` : `agent:${id}:main`;
-      const r = await testAgentSession(id, sessionKey, gatewayPort, gatewayToken);
+      // Feishu DM session test
+      const feishuDmUser = getFeishuDmUser(id);
+      const feishuSessionKey = feishuDmUser ? `agent:${id}:feishu:direct:${feishuDmUser}` : `agent:${id}:main`;
+      const r = await testAgentSession(id, feishuSessionKey, gatewayPort, gatewayToken);
       agentResults.push({
         agentId: r.agentId,
         platform: "agent",
@@ -472,6 +569,21 @@ export async function POST() {
         error: r.error,
         elapsed: r.elapsed,
       });
+
+      // WhatsApp DM session test
+      const whatsappDmUser = getWhatsappDmUser(id);
+      if (whatsappDmUser) {
+        const waSessionKey = `agent:${id}:whatsapp:direct:${whatsappDmUser}`;
+        const wr = await testAgentSession(id, waSessionKey, gatewayPort, gatewayToken);
+        agentResults.push({
+          agentId: wr.agentId,
+          platform: "agent-whatsapp",
+          ok: wr.ok,
+          detail: wr.reply,
+          error: wr.error,
+          elapsed: wr.elapsed,
+        });
+      }
     }
 
     // Flatten all results: platform tests + agent tests

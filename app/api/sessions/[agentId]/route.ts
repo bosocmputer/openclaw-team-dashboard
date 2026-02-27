@@ -35,6 +35,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agentId
       } else if (key.includes(":telegram:group:")) {
         type = "telegram-group";
         target = key.split(":telegram:group:")[1];
+      } else if (key.includes(":whatsapp:direct:")) {
+        type = "whatsapp-dm";
+        target = key.split(":whatsapp:direct:")[1];
+      } else if (key.includes(":whatsapp:group:")) {
+        type = "whatsapp-group";
+        target = key.split(":whatsapp:group:")[1];
       } else if (key.includes(":cron:")) {
         type = "cron";
         target = key.split(":cron:")[1];

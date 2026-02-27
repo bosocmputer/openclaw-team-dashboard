@@ -31,7 +31,7 @@ import { getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog'
 
 const CODE_SNIPPET_LIFETIME = 2.5 // seconds
 const CODE_SNIPPET_SPAWN_RATE = 0.6 // per second
-const PHOTO_COMMENT_LIFETIME = 2.0 // seconds
+const PHOTO_COMMENT_LIFETIME = 4.0 // seconds
 const PHOTO_COMMENT_SPAWN_RATE = 2.5 // per second
 const CODE_SNIPPETS = [
   // JS/TS

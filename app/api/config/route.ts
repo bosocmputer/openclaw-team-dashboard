@@ -147,6 +147,7 @@ function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: str
         const feishuGroup = key.match(/^agent:[^:]+:feishu:group:(.+)$/);
         const discordGroup = key.match(/^agent:[^:]+:discord:channel:(.+)$/);
         const telegramGroup = key.match(/^agent:[^:]+:telegram:group:(.+)$/);
+        const whatsappGroup = key.match(/^agent:[^:]+:whatsapp:group:(.+)$/);
         if (feishuGroup) {
           const gid = `feishu:${feishuGroup[1]}`;
           if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "feishu" };
@@ -160,6 +161,11 @@ function getGroupChats(agentIds: string[], agentMap: Record<string, { emoji: str
         if (telegramGroup) {
           const gid = `telegram:${telegramGroup[1]}`;
           if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "telegram" };
+          groupAgents[gid].agents.add(agentId);
+        }
+        if (whatsappGroup) {
+          const gid = `whatsapp:${whatsappGroup[1]}`;
+          if (!groupAgents[gid]) groupAgents[gid] = { agents: new Set(), channel: "whatsapp" };
           groupAgents[gid].agents.add(agentId);
         }
       }
@@ -316,19 +322,22 @@ export async function GET() {
       // main agent 特殊处理：默认绑定所有未显式绑定的 channel
       if (id === "main") {
         const hasFeishu = platforms.some((p) => p.name === "feishu");
-        if (!hasFeishu && channels.feishu?.enabled) {
-          // main gets feishu if channel is enabled and no other detection matched
+        if (!hasFeishu && channels.feishu && channels.feishu.enabled !== false) {
+          // main gets feishu if channel is configured and not explicitly disabled
           const acc = feishuAccounts["main"];
           const appId = acc?.appId || channels.feishu?.appId;
           const userOpenId = feishuUserOpenIds["main"] || null;
           platforms.push({ name: "feishu", accountId: "main", appId, ...(userOpenId && { botOpenId: userOpenId }) });
         }
-        if (channels.discord?.enabled) {
+        if (channels.discord && channels.discord.enabled !== false) {
           const botUserId = discordDmAllowFrom[0] || null;
           platforms.push({ name: "discord", ...(botUserId && { botUserId }) });
         }
-        if (channels.telegram?.enabled) {
+        if (channels.telegram && channels.telegram.enabled !== false) {
           platforms.push({ name: "telegram" });
+        }
+        if (channels.whatsapp && channels.whatsapp.enabled !== false) {
+          platforms.push({ name: "whatsapp" });
         }
       }
 
@@ -345,6 +354,12 @@ export async function GET() {
         );
         if (telegramBinding) {
           platforms.push({ name: "telegram" });
+        }
+        const whatsappBinding = bindings.find(
+          (b: any) => b.agentId === id && b.match?.channel === "whatsapp"
+        );
+        if (whatsappBinding) {
+          platforms.push({ name: "whatsapp" });
         }
       }
 

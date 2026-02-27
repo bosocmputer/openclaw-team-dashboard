@@ -107,6 +107,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "platform.feishu": "📱 飞书",
     "platform.discord": "🎮 Discord",
     "platform.telegram": "✈️ Telegram",
+    "platform.whatsapp": "💬 WhatsApp",
 
     // time range
     "range.daily": "按天",
@@ -169,6 +170,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sessions.type.discord-channel": "Discord 频道",
     "sessions.type.telegram-dm": "Telegram 私聊",
     "sessions.type.telegram-group": "Telegram 群聊",
+    "sessions.type.whatsapp-dm": "WhatsApp 私聊",
+    "sessions.type.whatsapp-group": "WhatsApp 群聊",
     "sessions.type.cron": "定时任务",
     "sessions.type.unknown": "未知",
     "sessions.test": "测试",
@@ -331,6 +334,7 @@ const translations: Record<Locale, Record<string, string>> = {
     "platform.feishu": "📱 Feishu",
     "platform.discord": "🎮 Discord",
     "platform.telegram": "✈️ Telegram",
+    "platform.whatsapp": "💬 WhatsApp",
 
     // time range
     "range.daily": "Daily",
@@ -393,6 +397,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "sessions.type.discord-channel": "Discord Channel",
     "sessions.type.telegram-dm": "Telegram DM",
     "sessions.type.telegram-group": "Telegram Group",
+    "sessions.type.whatsapp-dm": "WhatsApp DM",
+    "sessions.type.whatsapp-group": "WhatsApp Group",
     "sessions.type.cron": "Cron Job",
     "sessions.type.unknown": "Unknown",
     "sessions.test": "Test",
