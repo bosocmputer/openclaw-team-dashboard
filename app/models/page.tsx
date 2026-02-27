@@ -16,6 +16,7 @@ interface Model {
 interface Provider {
   id: string;
   api: string;
+  accessMode?: "api_key" | "auth";
   models: Model[];
   usedBy: { id: string; emoji: string; name: string }[];
 }
@@ -90,18 +91,62 @@ export default function ModelsPage() {
 
   const testAllModels = async () => {
     if (!data) return;
-    const pairs: { provider: string; modelId: string }[] = [];
+    const providerModels: Record<string, string[]> = {};
     for (const p of data.providers) {
       if (p.models.length > 0) {
-        for (const m of p.models) pairs.push({ provider: p.id, modelId: m.id });
+        providerModels[p.id] = Array.from(new Set(p.models.map((m) => m.id)));
       } else {
         const knownModels = Object.values(modelStats).filter(s => s.provider === p.id);
-        for (const s of knownModels) pairs.push({ provider: s.provider, modelId: s.modelId });
+        providerModels[p.id] = Array.from(new Set(knownModels.map((s) => s.modelId)));
       }
     }
-    for (const pair of pairs) {
-      testModel(pair.provider, pair.modelId);
-    }
+
+    await Promise.all(
+      Object.entries(providerModels)
+        .filter(([, modelIds]) => modelIds.length > 0)
+        .map(async ([providerId, modelIds]) => {
+          const keys = modelIds.map((id) => `${providerId}/${id}`);
+          const probeModelId = modelIds[0];
+
+          setTesting((prev) => {
+            const next = { ...prev };
+            for (const key of keys) next[key] = true;
+            return next;
+          });
+          setTestResults((prev) => {
+            const next = { ...prev };
+            for (const key of keys) delete next[key];
+            return next;
+          });
+
+          try {
+            const resp = await fetch("/api/test-model", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ provider: providerId, modelId: probeModelId }),
+            });
+            const result = await resp.json();
+            setTestResults((prev) => {
+              const next = { ...prev };
+              for (const key of keys) next[key] = result;
+              return next;
+            });
+          } catch (err: any) {
+            const result = { ok: false, error: err.message, elapsed: 0 };
+            setTestResults((prev) => {
+              const next = { ...prev };
+              for (const key of keys) next[key] = result;
+              return next;
+            });
+          } finally {
+            setTesting((prev) => {
+              const next = { ...prev };
+              for (const key of keys) next[key] = false;
+              return next;
+            });
+          }
+        })
+    );
   };
 
   // 首次加载 - 从 localStorage 恢复测试状态
@@ -236,15 +281,19 @@ export default function ModelsPage() {
 
             {provider.models.length > 0 ? (
               <div className="overflow-x-auto">
+                {(() => {
+                  const hasDetail = provider.models.some((m: any) => m.contextWindow || m.maxTokens);
+                  return (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-[var(--text-muted)] text-xs border-b border-[var(--border)]">
                       <th className="text-left py-2 pr-4">{t("models.colModelId")}</th>
                       <th className="text-left py-2 pr-4">{t("models.colName")}</th>
-                      <th className="text-left py-2 pr-4">{t("models.colContext")}</th>
-                      <th className="text-left py-2 pr-4">{t("models.colMaxOutput")}</th>
-                      <th className="text-left py-2 pr-4">{t("models.colInputType")}</th>
-                      <th className="text-left py-2 pr-4">{t("models.colReasoning")}</th>
+                      <th className="text-left py-2 pr-4">{t("models.colAccessMode")}</th>
+                      {hasDetail && <th className="text-left py-2 pr-4">{t("models.colContext")}</th>}
+                      {hasDetail && <th className="text-left py-2 pr-4">{t("models.colMaxOutput")}</th>}
+                      {hasDetail && <th className="text-left py-2 pr-4">{t("models.colInputType")}</th>}
+                      {hasDetail && <th className="text-left py-2 pr-4">{t("models.colReasoning")}</th>}
                       <th className="text-right py-2 pr-4">{t("models.colInputToken")}</th>
                       <th className="text-right py-2 pr-4">{t("models.colOutputToken")}</th>
                       <th className="text-right py-2 pr-4">{t("models.colAvgResponse")}</th>
@@ -260,10 +309,15 @@ export default function ModelsPage() {
                       return (
                       <tr key={m.id} className="border-b border-[var(--border)]/50">
                         <td className="py-2 pr-4 font-mono text-[var(--accent)]">{m.id}</td>
-                        <td className="py-2 pr-4">{m.name}</td>
-                        <td className="py-2 pr-4">{formatNum(m.contextWindow)}</td>
-                        <td className="py-2 pr-4">{formatNum(m.maxTokens)}</td>
+                        <td className="py-2 pr-4">{m.name || "-"}</td>
                         <td className="py-2 pr-4">
+                          <span className="px-1.5 py-0.5 rounded bg-[var(--bg)] text-xs">
+                            {provider.accessMode === "auth" ? t("models.accessModeAuth") : t("models.accessModeApiKey")}
+                          </span>
+                        </td>
+                        {hasDetail && <td className="py-2 pr-4">{formatNum(m.contextWindow)}</td>}
+                        {hasDetail && <td className="py-2 pr-4">{formatNum(m.maxTokens)}</td>}
+                        {hasDetail && <td className="py-2 pr-4">
                           <div className="flex gap-1">
                             {(m.input || []).map((inputType) => (
                               <span
@@ -274,8 +328,8 @@ export default function ModelsPage() {
                               </span>
                             ))}
                           </div>
-                        </td>
-                        <td className="py-2 pr-4">{m.reasoning ? "✅" : "❌"}</td>
+                        </td>}
+                        {hasDetail && <td className="py-2 pr-4">{m.reasoning ? "✅" : "❌"}</td>}
                         <td className="py-2 pr-4 text-right text-blue-400 font-mono text-xs">{stat ? formatTokens(stat.inputTokens) : "-"}</td>
                         <td className="py-2 pr-4 text-right text-emerald-400 font-mono text-xs">{stat ? formatTokens(stat.outputTokens) : "-"}</td>
                         <td className="py-2 pr-4 text-right text-amber-400 font-mono text-xs">{stat ? formatMs(stat.avgResponseMs) : "-"}</td>
@@ -304,6 +358,8 @@ export default function ModelsPage() {
                     })}
                   </tbody>
                 </table>
+                  );
+                })()}
               </div>
             ) : (
               <div>

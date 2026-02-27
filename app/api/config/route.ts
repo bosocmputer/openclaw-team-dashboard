@@ -380,12 +380,21 @@ export async function GET() {
     const feishuAgentIds = agentsWithStatus.filter((a: any) => a.platforms.some((p: any) => p.name === "feishu")).map((a: any) => a.id);
     const groupChats = getGroupChats(agentIds, agentMap, feishuAgentIds, sessionsMap);
 
+    const authProviderIds = new Set<string>();
+    if (config.auth?.profiles) {
+      for (const profileKey of Object.keys(config.auth.profiles)) {
+        const profile = config.auth.profiles[profileKey];
+        const providerId = profile?.provider || profileKey.split(":")[0];
+        if (providerId) authProviderIds.add(providerId);
+      }
+    }
+
     // 提取模型 providers
-    const providers = Object.entries(config.models?.providers || {}).map(
+    let providers = Object.entries(config.models?.providers || {}).map(
       ([providerId, provider]: [string, any]) => {
         const models = (provider.models || []).map((m: any) => ({
           id: m.id,
-          name: m.name,
+          name: m.name || m.id,
           contextWindow: m.contextWindow,
           maxTokens: m.maxTokens,
           reasoning: m.reasoning,
@@ -400,11 +409,79 @@ export async function GET() {
         return {
           id: providerId,
           api: provider.api,
+          accessMode: "api_key",
           models,
           usedBy,
         };
       }
     );
+
+    // 始终合并 auth.profiles + agents/defaults 推断的 provider/model，
+    // 兼容 models.providers 与 auth.profiles 同时存在的配置。
+    const providerModels: Record<string, { id: string; name?: string }[]> = {};
+
+    const ensureProvider = (providerId: string) => {
+      if (providerId && !providerModels[providerId]) providerModels[providerId] = [];
+    };
+    const addModelRef = (modelKey?: string, alias?: string) => {
+      if (!modelKey || typeof modelKey !== "string") return;
+      const slashIdx = modelKey.indexOf("/");
+      if (slashIdx <= 0 || slashIdx >= modelKey.length - 1) return;
+      const providerId = modelKey.slice(0, slashIdx);
+      const modelId = modelKey.slice(slashIdx + 1);
+      ensureProvider(providerId);
+      if (!providerModels[providerId].some((m) => m.id === modelId)) {
+        providerModels[providerId].push({ id: modelId, ...(alias && { name: alias }) });
+      }
+    };
+
+    // 从 auth.profiles 提取 provider 名称
+    for (const providerId of authProviderIds) ensureProvider(providerId);
+
+    // 从 agents.defaults.models 提取模型列表
+    const defaultsModels = config.agents?.defaults?.models || {};
+    for (const modelKey of Object.keys(defaultsModels)) {
+      const alias = defaultsModels[modelKey]?.alias;
+      addModelRef(modelKey, alias);
+    }
+
+    // 从主模型和 fallback 模型补充
+    addModelRef(defaultModel);
+    for (const fallback of fallbacks) addModelRef(fallback);
+
+    // 从每个 agent 的当前模型补充
+    for (const agent of agentsWithStatus) addModelRef(agent.model);
+
+    for (const [providerId, inferredModels] of Object.entries(providerModels)) {
+      let target = providers.find((p: any) => p.id === providerId);
+      if (!target) {
+        const usedBy = agentsWithStatus
+          .filter((a: any) => a.model.startsWith(providerId + "/"))
+          .map((a: any) => ({ id: a.id, emoji: a.emoji, name: a.name }));
+        target = { id: providerId, api: undefined, accessMode: authProviderIds.has(providerId) ? "auth" : "api_key", models: [], usedBy };
+        providers.push(target);
+      }
+
+      if (!target.accessMode) {
+        target.accessMode = authProviderIds.has(providerId) ? "auth" : "api_key";
+      }
+
+      for (const m of inferredModels) {
+        const exists = target.models.find((x: any) => x.id === m.id);
+        if (!exists) {
+          target.models.push({
+            id: m.id,
+            name: m.name || m.id,
+            contextWindow: undefined,
+            maxTokens: undefined,
+            reasoning: undefined,
+            input: undefined,
+          });
+        } else if (!exists.name) {
+          exists.name = m.name || exists.id;
+        }
+      }
+    }
 
     const data = {
       agents: agentsWithStatus,
