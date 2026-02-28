@@ -294,7 +294,8 @@ export async function GET() {
       const identityName = readIdentityName(id, agent.agentDir, agent.workspace);
       const name = identityName || agent.name || id;
       const emoji = agent.identity?.emoji || "🤖";
-      const model = agent.model || defaultModel;
+      const rawModel = agent.model || defaultModel;
+      const model = typeof rawModel === "object" ? (rawModel.primary || rawModel.default || JSON.stringify(rawModel)) : (rawModel || "");
 
       // 查找绑定的平台
       const platforms: { name: string; accountId?: string; appId?: string; botOpenId?: string; botUserId?: string }[] = [];
@@ -403,7 +404,7 @@ export async function GET() {
 
         // 找出使用该 provider 的 agents
         const usedBy = agentsWithStatus
-          .filter((a: any) => a.model.startsWith(providerId + "/"))
+          .filter((a: any) => typeof a.model === "string" && a.model.startsWith(providerId + "/"))
           .map((a: any) => ({ id: a.id, emoji: a.emoji, name: a.name }));
 
         return {
@@ -456,7 +457,7 @@ export async function GET() {
       let target = providers.find((p: any) => p.id === providerId);
       if (!target) {
         const usedBy = agentsWithStatus
-          .filter((a: any) => a.model.startsWith(providerId + "/"))
+          .filter((a: any) => typeof a.model === "string" && a.model.startsWith(providerId + "/"))
           .map((a: any) => ({ id: a.id, emoji: a.emoji, name: a.name }));
         target = { id: providerId, api: undefined, accessMode: authProviderIds.has(providerId) ? "auth" : "api_key", models: [], usedBy };
         providers.push(target);
