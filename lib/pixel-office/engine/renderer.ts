@@ -426,55 +426,8 @@ export function renderScene(
       })
     }
 
-    // Code snippet particles floating above working characters
-    if (ch.codeSnippets.length > 0) {
-      const snippets = ch.codeSnippets
-      const baseX = Math.round(offsetX + ch.x * zoom)
-      const baseY = drawY
-      const snipFontSize = Math.max(12, Math.round(7 * zoom))
-      drawables.push({
-        zY: charZY + 0.2,
-        draw: (c) => {
-          c.save()
-          c.font = `${snipFontSize}px monospace`
-          c.textAlign = 'center'
-          c.textBaseline = 'bottom'
-          for (const s of snippets) {
-            const progress = s.age / 2.5 // 0→1 over lifetime
-            const floatY = baseY - (10 + progress * 28) * zoom
-            const floatX = baseX + s.x * zoom
-            const alpha = progress < 0.2 ? progress / 0.2 : progress > 0.7 ? (1 - progress) / 0.3 : 1
-            c.globalAlpha = alpha * 0.85
-            // Background pill
-            const tw = c.measureText(s.text).width
-            const px = 3 * (zoom / 3)
-            const py = 1.5 * (zoom / 3)
-            c.fillStyle = 'rgba(0,0,0,0.7)'
-            const rx = floatX - tw / 2 - px
-            const ry = floatY - snipFontSize - py
-            const rw = tw + px * 2
-            const rh = snipFontSize + py * 2
-            const cr = 3
-            c.beginPath()
-            c.moveTo(rx + cr, ry)
-            c.lineTo(rx + rw - cr, ry)
-            c.quadraticCurveTo(rx + rw, ry, rx + rw, ry + cr)
-            c.lineTo(rx + rw, ry + rh - cr)
-            c.quadraticCurveTo(rx + rw, ry + rh, rx + rw - cr, ry + rh)
-            c.lineTo(rx + cr, ry + rh)
-            c.quadraticCurveTo(rx, ry + rh, rx, ry + rh - cr)
-            c.lineTo(rx, ry + cr)
-            c.quadraticCurveTo(rx, ry, rx + cr, ry)
-            c.closePath()
-            c.fill()
-            // Text
-            c.fillStyle = '#4ade80'
-            c.fillText(s.text, floatX, floatY)
-          }
-          c.restore()
-        },
-      })
-    }
+    // Code snippet particles are rendered as DOM overlays in app/pixel-office/page.tsx
+    // so they can float beyond the canvas area and pass over the top agent list.
   }
 
   // Sort by Y (lower = in front = drawn later)

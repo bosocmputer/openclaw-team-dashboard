@@ -32,7 +32,7 @@ import { BugSystem } from '../bugs/bugSystem'
 import { BUG_DEFAULT_COUNT } from '../bugs/config'
 import type { BugEntity } from '../bugs/types'
 
-const CODE_SNIPPET_LIFETIME = 2.5 // seconds
+const CODE_SNIPPET_LIFETIME = 5.5 // seconds
 const CODE_SNIPPET_SPAWN_RATE = 0.6 // per second
 const PHOTO_COMMENT_LIFETIME = 4.0 // seconds
 const PHOTO_COMMENT_SPAWN_RATE = 2.5 // per second

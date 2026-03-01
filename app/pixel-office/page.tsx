@@ -107,6 +107,7 @@ function getGhostBorderDirection(col: number, row: number, cols: number, rows: n
 }
 
 const FIXED_CANVAS_ZOOM = 2.5
+const CODE_SNIPPET_LIFETIME_SEC = 5.5
 
 let cachedOfficeState: OfficeState | null = null
 let cachedEditorState: EditorState | null = null
@@ -157,6 +158,7 @@ export default function PixelOfficePage() {
   const [showIdleRank, setShowIdleRank] = useState(false)
   const idleRankRef = useRef<Array<{ agentId: string; onlineMinutes: number; activeMinutes: number; idleMinutes: number; idlePercent: number }> | null>(null)
   const floatingCommentsRef = useRef<Array<{ key: string; text: string; x: number; y: number; opacity: number }>>([])
+  const floatingCodeRef = useRef<Array<{ key: string; text: string; x: number; y: number; opacity: number }>>([])
   const [floatingTick, setFloatingTick] = useState(0)
   const forceEditorUpdate = useCallback(() => setEditorTick(t => t + 1), [])
 
@@ -318,6 +320,13 @@ export default function PixelOfficePage() {
         const containerTop = container.offsetTop
         const lifetime = 4.0
         const items: Array<{ key: string; text: string; x: number; y: number; opacity: number }> = []
+        const codeItems: Array<{ key: string; text: string; x: number; y: number; opacity: number }> = []
+        const workingCharIds = new Set<number>()
+        for (const a of agents) {
+          if (a.state !== 'working') continue
+          const cid = agentIdMapRef.current.get(a.agentId)
+          if (typeof cid === 'number') workingCharIds.add(cid)
+        }
         for (const ch of office.getCharacters()) {
           if (ch.photoComments.length === 0) continue
           const anchorX = ox + ch.x * zoom
@@ -339,7 +348,28 @@ export default function PixelOfficePage() {
             })
           }
         }
+        for (const ch of office.getCharacters()) {
+          if (!workingCharIds.has(ch.id)) continue
+          if (ch.codeSnippets.length === 0) continue
+          const anchorX = ox + ch.x * zoom
+          const anchorY = containerTop + oy + (ch.y - 10) * zoom
+          const totalDist = anchorY + 24
+          for (let i = 0; i < ch.codeSnippets.length; i++) {
+            const s = ch.codeSnippets[i]
+            const progress = s.age / CODE_SNIPPET_LIFETIME_SEC
+            if (progress <= 0 || progress >= 1) continue
+            const alpha = progress < 0.15 ? progress / 0.15 : progress > 0.88 ? (1 - progress) / 0.12 : 1
+            codeItems.push({
+              key: `${ch.id}-code-${i}-${s.text}`,
+              text: s.text,
+              x: anchorX + s.x * zoom,
+              y: anchorY - progress * totalDist,
+              opacity: Math.max(0, alpha * 0.9),
+            })
+          }
+        }
         floatingCommentsRef.current = items
+        floatingCodeRef.current = codeItems
         setFloatingTick(t => t + 1)
       }
       animationFrameIdRef.current = requestAnimationFrame(render)
@@ -348,7 +378,7 @@ export default function PixelOfficePage() {
     return () => {
       if (animationFrameIdRef.current !== null) cancelAnimationFrame(animationFrameIdRef.current)
     }
-  }, [hoveredAgentId, editorTick, officeReady])
+  }, [hoveredAgentId, editorTick, officeReady, agents])
 
   // Load GitHub contribution heatmap data (real → fallback mock)
   useEffect(() => {
@@ -1051,6 +1081,18 @@ export default function PixelOfficePage() {
           style={{ left: fc.x, top: fc.y, opacity: fc.opacity, transform: 'translateX(-50%)' }}>
           <span className="inline-block px-3 py-1 rounded-full text-sm font-bold"
             style={{ backgroundColor: 'rgba(0,0,0,0.8)', color: '#FFD700' }}>
+            {fc.text}
+          </span>
+        </div>
+      ))}
+      {/* Floating code snippets (working agents): rise to top, overlay top bar */}
+      {floatingCodeRef.current.map(fc => (
+        <div key={fc.key} className="absolute pointer-events-none z-40 whitespace-nowrap"
+          style={{ left: fc.x, top: fc.y, opacity: fc.opacity, transform: 'translateX(-50%)' }}>
+          <span
+            className="inline-block px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold"
+            style={{ backgroundColor: 'rgba(0,0,0,0.72)', color: '#4ade80' }}
+          >
             {fc.text}
           </span>
         </div>
