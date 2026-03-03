@@ -47,21 +47,34 @@ export function GlobalBugsOverlay() {
 
     const onStorage = () => applyConfig();
     const onConfigChanged = () => applyConfig();
+    const getVisibleLogoAnchorCenter = (): { x: number; y: number } | null => {
+      const anchors = Array.from(document.querySelectorAll<HTMLElement>("[data-openclaw-logo-anchor='true']"));
+      for (const anchor of anchors) {
+        const rect = anchor.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        return {
+          x: (rect.left + rect.width / 2) / BUGS_ZOOM,
+          y: (rect.top + rect.height / 2) / BUGS_ZOOM,
+        };
+      }
+      return null;
+    };
     const onLogoDragStart = () => {
       if (!systemRef.current) return;
-      // Detect mobile viewport
       const isMobile = window.matchMedia("(max-width: 767px)").matches;
-
-      // Calculate logo position based on viewport
       let startX: number;
       let startY: number;
-
       if (isMobile) {
-        // Mobile: logo is in top header, centered horizontally
-        startX = (window.innerWidth / 2) / BUGS_ZOOM;
-        startY = 28 / BUGS_ZOOM; // Half of header height (h-14 = 56px)
+        const anchorCenter = getVisibleLogoAnchorCenter();
+        if (anchorCenter) {
+          startX = anchorCenter.x;
+          startY = anchorCenter.y;
+        } else {
+          startX = (window.innerWidth / 2) / BUGS_ZOOM;
+          startY = 28 / BUGS_ZOOM;
+        }
       } else {
-        // Desktop: logo is in left sidebar
+        // Keep desktop behavior unchanged.
         startX = 58 / BUGS_ZOOM;
         startY = 42 / BUGS_ZOOM;
       }

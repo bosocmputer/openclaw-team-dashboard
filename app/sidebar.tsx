@@ -188,6 +188,7 @@ export function Sidebar() {
   };
 
   const logoTransform = `translate(${manualLogoOffset.dx + logoCarry.dx}px, ${manualLogoOffset.dy + logoCarry.dy}px) rotate(${logoCarry.angle + manualLogoAngle}rad)`;
+  const mobileLogoTransform = `translate(${logoCarry.dx}px, ${logoCarry.dy}px) rotate(${logoCarry.angle}rad)`;
   const logoCursor = !bugsEnabled ? (isLogoDragging ? "grabbing" : "grab") : "default";
   const mobileCurrent = NAV_ITEMS.flatMap((g) => g.items).find((item) =>
     item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
@@ -243,8 +244,26 @@ export function Sidebar() {
             >
               ☰
             </button>
-            <Link href="/" className="flex items-center gap-2 min-w-0">
-              <span className="text-2xl leading-none">🦞</span>
+            <Link
+              href="/"
+              className="flex items-center gap-2 min-w-0"
+              onClickCapture={handleLogoClickCapture}
+              onDragStart={handleLogoNativeDragStart}
+              draggable={false}
+            >
+              <span
+                className="relative inline-block text-2xl leading-none transition-opacity duration-300"
+                data-openclaw-logo-anchor="true"
+                onDragStart={handleLogoNativeDragStart}
+                draggable={false}
+                style={{
+                  transform: mobileLogoTransform,
+                  transformOrigin: "50% 50%",
+                  opacity: logoCarry.hidden ? 0 : 1,
+                }}
+              >
+                🦞
+              </span>
               <div className="min-w-0">
                 <div className="text-xs font-bold tracking-wide truncate">OPENCLAW</div>
                 <div className="text-[10px] text-[var(--text-muted)] truncate">

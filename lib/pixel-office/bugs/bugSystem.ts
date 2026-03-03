@@ -297,10 +297,25 @@ export class BugSystem {
     this.logoCarry.carrierIds.clear()
     this.logoCarry.laggers.clear()
     this.logoCarry.regripUntil.clear()
+    this.logoCarry.logoX = this.logoCarry.startX
+    this.logoCarry.logoY = this.logoCarry.startY
+    this.logoCarry.logoVx = 0
+    this.logoCarry.logoVy = 0
+    this.logoCarry.logoAngle = 0
+    this.logoCarry.logoAngularV = 0
+    this.logoCarry.displayX = this.logoCarry.startX
+    this.logoCarry.displayY = this.logoCarry.startY
+    this.logoCarry.displayVx = 0
+    this.logoCarry.displayVy = 0
+    this.logoCarry.displayAngle = 0
+    this.logoCarry.displayAngularV = 0
     for (const b of this.bugs) b.isCarrier = false
   }
 
   getLogoCarryVisual(): { active: boolean; dx: number; dy: number; angle: number; hidden: boolean } {
+    if (!this.logoCarry.active) {
+      return { active: false, dx: 0, dy: 0, angle: 0, hidden: false }
+    }
     return {
       active: this.logoCarry.active,
       dx: this.logoCarry.displayX - this.logoCarry.startX,
@@ -660,11 +675,15 @@ export class BugSystem {
       this.logoCarry.logoAngle = clamp(this.logoCarry.logoAngle, -0.75, 0.75)
       this.logoCarry.logoX += this.logoCarry.logoVx * dt
       this.logoCarry.logoY += this.logoCarry.logoVy * dt
-    } else {
+    } else if (n > 0) {
       this.logoCarry.logoVx *= 0.85
       this.logoCarry.logoVy *= 0.85
       this.logoCarry.logoAngularV *= 0.82
       this.logoCarry.logoAngle += this.logoCarry.logoAngularV * dt
+    } else {
+      this.logoCarry.logoVx = 0
+      this.logoCarry.logoVy = 0
+      this.logoCarry.logoAngularV = 0
     }
 
     // Keep visual center fully aligned with physical payload center.
