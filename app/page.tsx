@@ -6,6 +6,7 @@ import { GatewayStatus } from "./gateway-status";
 import {
   AgentCard,
   ModelBadge,
+  type AgentModelOptionGroup,
   type PlatformTestResult,
   type AgentModelTestResult,
   type AgentSessionTestResult,
@@ -46,7 +47,11 @@ interface GroupChat {
 interface ConfigData {
   agents: Agent[];
   defaults: { model: string; fallbacks: string[] };
-  providers?: { id: string; accessMode?: "auth" | "api_key" }[];
+  providers?: Array<{
+    id: string;
+    accessMode?: "auth" | "api_key";
+    models?: Array<{ id: string; name?: string }>;
+  }>;
   gateway?: { port: number; token?: string; host?: string };
   groupChats?: GroupChat[];
 }
@@ -291,6 +296,19 @@ export default function Home() {
         if (!silent) setLoading(false);
       });
   }, []);
+
+  const changeAgentModel = useCallback(async (agentId: string, model: string) => {
+    const resp = await fetch("/api/config/agent-model", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId, model }),
+    });
+    const payload = await parseApiPayload(resp);
+    if (!payload.ok) {
+      throw new Error(payload.errorText || t("agent.modelApplyFailed"));
+    }
+    fetchData(true);
+  }, [fetchData, parseApiPayload, t]);
 
   // 首次加载 - 从 localStorage 恢复测试状态
   useEffect(() => {
@@ -545,6 +563,17 @@ export default function Home() {
     if (!p?.id || !p.accessMode) continue;
     providerAccessModeMap[p.id] = p.accessMode;
   }
+  const modelOptions: AgentModelOptionGroup[] = (data.providers || [])
+    .filter((provider) => provider?.id && Array.isArray(provider.models) && provider.models.length > 0)
+    .map((provider) => ({
+      providerId: provider.id,
+      providerName: provider.id,
+      accessMode: provider.accessMode,
+      models: (provider.models || []).map((model) => ({
+        id: model.id,
+        name: model.name || model.id,
+      })),
+    }));
   return (
     <div className="p-3 md:p-4 max-w-6xl mx-auto">
       {/* 头部 */}
@@ -621,9 +650,16 @@ export default function Home() {
         </div>
       </div>
 
+      {/* 卡片墙 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {data.agents.map((agent) => (
+          <AgentCard key={agent.id} agent={agent} gatewayPort={data.gateway?.port || 18789} gatewayToken={data.gateway?.token} gatewayHost={data.gateway?.host} t={t} testResult={testResults?.[agent.id]} platformTestResults={platformTestResults || undefined} sessionTestResult={sessionTestResults?.[agent.id]} agentState={agentStates[agent.id]} dmSessionResults={dmSessionResults || undefined} providerAccessModeMap={providerAccessModeMap} modelOptions={modelOptions} onModelChange={changeAgentModel} />
+        ))}
+      </div>
+
       {/* Agent 任務追蹤 */}
       {agentActivity && agentActivity.some(a => a.state !== "offline") && (
-        <div className="mb-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        <div className="mt-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <h2 className="text-sm font-semibold text-[var(--text-muted)] mb-3">📋 Agent 任務追蹤</h2>
           <div className="space-y-2">
             {agentActivity
@@ -666,13 +702,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      {/* 卡片墙 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {data.agents.map((agent) => (
-          <AgentCard key={agent.id} agent={agent} gatewayPort={data.gateway?.port || 18789} gatewayToken={data.gateway?.token} gatewayHost={data.gateway?.host} t={t} testResult={testResults?.[agent.id]} platformTestResults={platformTestResults || undefined} sessionTestResult={sessionTestResults?.[agent.id]} agentState={agentStates[agent.id]} dmSessionResults={dmSessionResults || undefined} providerAccessModeMap={providerAccessModeMap} />
-        ))}
-      </div>
 
       {/* 汇总统计趋势 */}
       {allStats && (

@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { getConfigCache, setConfigCache } from "@/lib/config-cache";
 import { OPENCLAW_CONFIG_PATH, OPENCLAW_HOME } from "@/lib/openclaw-paths";
 
 // 配置文件路径：优先使用 OPENCLAW_HOME 环境变量，否则默认 ~/.openclaw
 const CONFIG_PATH = OPENCLAW_CONFIG_PATH;
 const OPENCLAW_DIR = OPENCLAW_HOME;
 
-// 30秒内存缓存
-let configCache: { data: any; ts: number } | null = null;
 const CACHE_TTL_MS = 30_000;
 
 // 从配置的 allowFrom 读取用户 id，用于构建 session key
@@ -256,6 +255,7 @@ function readIdentityName(agentId: string, agentDir?: string, workspace?: string
 
 export async function GET() {
   // 命中缓存直接返回
+  const configCache = getConfigCache();
   if (configCache && Date.now() - configCache.ts < CACHE_TTL_MS) {
     return NextResponse.json(configCache.data);
   }
@@ -547,7 +547,7 @@ export async function GET() {
       },
       groupChats,
     };
-    configCache = { data, ts: Date.now() };
+    setConfigCache({ data, ts: Date.now() });
     return NextResponse.json(data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

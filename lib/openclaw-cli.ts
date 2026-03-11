@@ -1,4 +1,5 @@
 import { exec, execFile } from "child_process";
+import crypto from "crypto";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -60,4 +61,48 @@ export function parseJsonFromMixedOutput(output: string): any {
     }
   }
   return null;
+}
+
+export function parseOpenclawJsonOutput(stdout: string, stderr = ""): any {
+  const trimmed = stdout.trim();
+  if (trimmed) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Fallback below.
+    }
+  }
+  return parseJsonFromMixedOutput(`${stdout}\n${stderr}`);
+}
+
+export function resolveConfigSnapshotHash(snapshot: { hash?: string; raw?: string | null } | null | undefined): string | null {
+  const hash = snapshot?.hash;
+  if (typeof hash === "string" && hash.trim()) return hash.trim();
+  if (typeof snapshot?.raw !== "string") return null;
+  return crypto.createHash("sha256").update(snapshot.raw).digest("hex");
+}
+
+export async function callOpenclawGateway(method: string, params: Record<string, unknown> = {}, timeoutMs = 10000): Promise<any> {
+  try {
+    const { stdout, stderr } = await execOpenclaw([
+      "gateway",
+      "call",
+      method,
+      "--json",
+      "--timeout",
+      String(timeoutMs),
+      "--params",
+      JSON.stringify(params),
+    ]);
+    const parsed = parseOpenclawJsonOutput(stdout, stderr);
+    if (parsed == null) {
+      throw new Error(`Failed to parse Gateway response for ${method}`);
+    }
+    return parsed;
+  } catch (err: any) {
+    const stderr = typeof err?.stderr === "string" ? err.stderr.trim() : "";
+    const stdout = typeof err?.stdout === "string" ? err.stdout.trim() : "";
+    const message = stderr || stdout || err?.message || `Gateway call failed: ${method}`;
+    throw new Error(message);
+  }
 }

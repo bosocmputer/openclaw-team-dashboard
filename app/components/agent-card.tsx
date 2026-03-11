@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { buildGatewayUrl } from "@/lib/gateway-url";
 
 export interface AgentPlatform {
@@ -29,6 +29,13 @@ export interface AgentCardAgent {
   model: string;
   platforms: AgentPlatform[];
   session?: AgentCardSession;
+}
+
+export interface AgentModelOptionGroup {
+  providerId: string;
+  providerName: string;
+  accessMode?: "auth" | "api_key";
+  models: Array<{ id: string; name: string }>;
 }
 
 export interface PlatformTestResult {
@@ -341,6 +348,8 @@ export function AgentCard({
   agentState,
   dmSessionResults,
   providerAccessModeMap,
+  modelOptions,
+  onModelChange,
 }: {
   agent: AgentCardAgent;
   gatewayPort: number;
@@ -353,12 +362,30 @@ export function AgentCard({
   agentState?: string;
   dmSessionResults?: Record<string, PlatformTestResult | null>;
   providerAccessModeMap?: Record<string, "auth" | "api_key">;
+  modelOptions?: AgentModelOptionGroup[];
+  onModelChange?: (agentId: string, model: string) => Promise<void>;
 }) {
+  const [isEditingModel, setIsEditingModel] = useState(false);
+  const [draftModel, setDraftModel] = useState(agent.model);
+  const [isSavingModel, setIsSavingModel] = useState(false);
+  const [modelSaveError, setModelSaveError] = useState<string | null>(null);
   const sessionKey = `agent:${agent.id}:main`;
   let sessionUrl = buildGatewayUrl(gatewayPort, "/chat", { session: sessionKey }, gatewayHost);
   if (gatewayToken) sessionUrl = buildGatewayUrl(gatewayPort, "/chat", { session: sessionKey, token: gatewayToken }, gatewayHost);
   const modelProvider = agent.model.includes("/") ? agent.model.split("/", 1)[0] : "default";
   const modelAccessMode = providerAccessModeMap?.[modelProvider];
+  const canSwitchModel = !!onModelChange && !!modelOptions && modelOptions.length > 0;
+  const knownModelRefs = new Set(
+    (modelOptions || []).flatMap((group) => group.models.map((model) => `${group.providerId}/${model.id}`)),
+  );
+  const currentModelKnown = knownModelRefs.has(agent.model);
+
+  useEffect(() => {
+    if (!isEditingModel) {
+      setDraftModel(agent.model);
+      setModelSaveError(null);
+    }
+  }, [agent.model, isEditingModel]);
 
   function formatTimeAgo(ts: number): string {
     const diff = Date.now() - ts;
@@ -369,6 +396,20 @@ export function AgentCard({
     if (hours < 24) return `${hours} ${t("common.hoursAgo")}`;
     const days = Math.floor(hours / 24);
     return `${days} ${t("common.daysAgo")}`;
+  }
+
+  async function handleModelSave(): Promise<void> {
+    if (!onModelChange || !draftModel || draftModel === agent.model) return;
+    setIsSavingModel(true);
+    setModelSaveError(null);
+    try {
+      await onModelChange(agent.id, draftModel);
+      setIsEditingModel(false);
+    } catch (err: any) {
+      setModelSaveError(err?.message || t("agent.modelApplyFailed"));
+    } finally {
+      setIsSavingModel(false);
+    }
   }
 
   return (
@@ -404,7 +445,7 @@ export function AgentCard({
         </div>
         <div>
           <span className="text-xs text-[var(--text-muted)] block">{t("agent.model")}</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ModelBadge model={agent.model} accessMode={modelAccessMode} />
             {testResult === undefined ? (
               <span className="text-xs text-[var(--text-muted)]">--</span>
@@ -415,7 +456,71 @@ export function AgentCard({
             ) : (
               <ErrorStatusWithCopy error={testResult.error} />
             )}
+            {canSwitchModel && !isEditingModel && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftModel(agent.model);
+                  setModelSaveError(null);
+                  setIsEditingModel(true);
+                }}
+                className="px-2 py-0.5 rounded-full text-xs border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--accent)] transition"
+              >
+                {t("agent.switchModel")}
+              </button>
+            )}
           </div>
+          {canSwitchModel && isEditingModel && (
+            <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2 space-y-2">
+              <select
+                value={draftModel}
+                onChange={(e) => setDraftModel(e.target.value)}
+                disabled={isSavingModel}
+                className="w-full px-2 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm text-[var(--text)]"
+              >
+                {!currentModelKnown && (
+                  <option value={agent.model}>{`${t("agent.currentUnknownModel")}: ${agent.model}`}</option>
+                )}
+                {(modelOptions || []).map((group) => (
+                  <optgroup key={group.providerId} label={group.providerName}>
+                    {group.models.map((model) => (
+                      <option key={`${group.providerId}/${model.id}`} value={`${group.providerId}/${model.id}`}>
+                        {`${group.providerId} / ${model.name || model.id}`}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleModelSave()}
+                  disabled={isSavingModel || !draftModel || draftModel === agent.model}
+                  className="px-3 py-1.5 rounded-lg text-xs bg-[var(--accent)] text-[var(--bg)] disabled:opacity-50"
+                >
+                  {isSavingModel ? t("agent.modelSaving") : t("agent.saveModel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftModel(agent.model);
+                    setModelSaveError(null);
+                    setIsEditingModel(false);
+                  }}
+                  disabled={isSavingModel}
+                  className="px-3 py-1.5 rounded-lg text-xs border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--accent)] transition disabled:opacity-50"
+                >
+                  {t("agent.cancelModel")}
+                </button>
+              </div>
+              <p className="text-[10px] text-[var(--text-muted)]">
+                {t("agent.modelApplyHint")}
+              </p>
+              {modelSaveError && (
+                <p className="text-xs text-red-400">{modelSaveError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div>

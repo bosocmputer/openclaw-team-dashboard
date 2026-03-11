@@ -103,6 +103,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "agent.lastActive": "最近活躍",
     "agent.todayAvgResponse": "平均回應",
     "agent.todayAvgResponseTip": "今日平均回應時間",
+    "agent.switchModel": "切換模型",
+    "agent.saveModel": "儲存並套用",
+    "agent.cancelModel": "取消",
+    "agent.modelSaving": "套用中...",
+    "agent.modelApplyHint": "儲存後會自動重新啟動 Gateway，以套用新模型。",
+    "agent.modelApplyFailed": "模型套用失敗",
+    "agent.currentUnknownModel": "目前模型（不在候選列表）",
 
     // agent status
     "agent.status.working": "工作中",
@@ -363,6 +370,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "agent.lastActive": "最近活跃",
     "agent.todayAvgResponse": "平均响应",
     "agent.todayAvgResponseTip": "今日平均响应时间",
+    "agent.switchModel": "切换模型",
+    "agent.saveModel": "保存并应用",
+    "agent.cancelModel": "取消",
+    "agent.modelSaving": "应用中...",
+    "agent.modelApplyHint": "保存后会自动重启 Gateway，以应用新模型。",
+    "agent.modelApplyFailed": "模型应用失败",
+    "agent.currentUnknownModel": "当前模型（不在候选列表）",
 
     // agent status
     "agent.status.working": "工作中",
@@ -623,6 +637,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "agent.lastActive": "Last Active",
     "agent.todayAvgResponse": "Avg Response",
     "agent.todayAvgResponseTip": "Today's average response time",
+    "agent.switchModel": "Switch Model",
+    "agent.saveModel": "Save & Apply",
+    "agent.cancelModel": "Cancel",
+    "agent.modelSaving": "Applying...",
+    "agent.modelApplyHint": "Saving will restart the Gateway automatically to apply the new model.",
+    "agent.modelApplyFailed": "Failed to apply model",
+    "agent.currentUnknownModel": "Current model (not in option list)",
 
     // agent status
     "agent.status.working": "Working",
