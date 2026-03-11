@@ -2,9 +2,269 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
-export type Locale = "zh" | "en";
+export type Locale = "zh-TW" | "zh" | "en";
 
 const translations: Record<Locale, Record<string, string>> = {
+  "zh-TW": {
+    // layout
+    "site.title": "OpenClaw Bot Dashboard",
+    "site.desc": "查看所有 OpenClaw 機器人設定",
+
+    // nav sidebar
+    "nav.overview": "總覽",
+    "nav.agents": "機器人",
+    "nav.models": "模型列表",
+    "nav.monitor": "監控",
+    "nav.sessions": "會話列表",
+    "nav.stats": "訊息統計",
+    "nav.pixelOffice": "像素辦公室",
+    "nav.config": "設定",
+    "nav.skills": "技能管理",
+    "nav.alerts": "警報中心",
+    "nav.experiments": "實驗功能",
+    "nav.expandSidebar": "展開側邊欄",
+    "nav.collapseSidebar": "收起側邊欄",
+    "nav.bugsOn": "Bugs On",
+    "nav.bugsOff": "Bugs Off",
+    "nav.bugsCount": "數量",
+
+    // alerts page
+    "alerts.title": "警報中心",
+    "alerts.subtitle": "設定系統警報與通知",
+    "alerts.enableAlerts": "啟用警報",
+    "alerts.enableDesc": "開啟／關閉所有警報通知",
+    "alerts.receiveAgent": "接收警報的機器人",
+    "alerts.rules": "警報規則",
+    "alerts.rulesDesc": "設定哪些條件會觸發警報",
+    "alerts.triggered": "警報觸發 ({count})",
+    "alerts.checking": "正在檢查警報...",
+    "alerts.checkNow": "立即檢查",
+    "alerts.checkInterval": "檢查間隔",
+
+    // common
+    "common.loading": "思考中...",
+    "common.loadError": "載入失敗",
+    "common.backHome": "← 返回首頁",
+    "common.backOverview": "← 返回總覽",
+    "common.noData": "暫無資料",
+    "common.close": "關閉",
+    "common.test": "🧪 測試",
+    "common.testing": "⏳ 測試中...",
+    "common.justNow": "剛剛",
+    "common.minutesAgo": "分鐘前",
+    "common.hoursAgo": "小時前",
+    "common.daysAgo": "天前",
+    "common.manualRefresh": "手動重新整理",
+    "common.seconds": "秒",
+    "common.minute": "分鐘",
+    "common.minutes": "分鐘",
+
+    // home page
+    "home.title": "🐾 OpenClaw Bot Dashboard",
+    "home.agentCount": "個機器人",
+    "home.pageTitle": "OpenClaw 機器人",
+    "home.defaultModel": "預設模型",
+    "home.viewModels": "查看模型列表 →",
+    "home.skillMgmt": "🧩 技能管理",
+    "home.testAll": "測試綁定的模型",
+    "home.testingAll": "測試中...",
+    "home.testOk": "正常",
+    "home.testFail": "異常",
+    "home.updatedAt": "更新於",
+    "home.refreshManual": "🔄 手動重新整理",
+    "home.globalTrend": "📊 全域統計趨勢",
+    "home.totalInputToken": "總 Input Token",
+    "home.totalOutputToken": "總 Output Token",
+    "home.totalMessages": "總訊息數",
+    "home.tokenTrend": "🔢 Token 消耗趨勢",
+    "home.avgResponseTrend": "⏱️ 平均回應時間趨勢",
+    "home.groupTopology": "💬 群聊拓撲",
+    "home.fallbackModels": "🔄 Fallback 模型",
+    "home.feishuGroup": "飛書群",
+    "home.discordChannel": "Discord 頻道",
+    "home.bots": "個機器人",
+    "home.noResponseData": "暫無回應時間資料",
+    "home.testPlatforms": "測試平台連線",
+    "home.testingPlatforms": "測試平台中...",
+    "home.testSessions": "測試 Agent",
+    "home.testingSessions": "測試中...",
+    "home.testDmSessions": "測試 DM Session",
+    "home.testingDmSessions": "測試中...",
+
+    // agent card
+    "agent.model": "模型",
+    "agent.platform": "平台",
+    "agent.feishuAppId": "飛書 App ID",
+    "agent.sessionCount": "會話數",
+    "agent.messageCount": "訊息數",
+    "agent.tokenUsage": "Token 用量",
+    "agent.totalTokenTip": "總 Token 使用量",
+    "agent.stats": "統計",
+    "agent.lastActive": "最近活躍",
+    "agent.todayAvgResponse": "平均回應",
+    "agent.todayAvgResponseTip": "今日平均回應時間",
+
+    // agent status
+    "agent.status.working": "工作中",
+    "agent.status.online": "線上",
+    "agent.status.idle": "閒置",
+    "agent.status.offline": "離線",
+    "agent.inUse": "使用中:",
+    "agent.openChat": "點擊開啟聊天頁面",
+
+    // platform
+    "platform.feishu": "📱 飛書",
+    "platform.discord": "🎮 Discord",
+    "platform.telegram": "✈️ Telegram",
+    "platform.whatsapp": "💬 WhatsApp",
+    "platform.qqbot": "🐧 QQBot",
+
+    // time range
+    "range.daily": "按日",
+    "range.weekly": "按週",
+    "range.monthly": "按月",
+
+    // refresh options
+    "refresh.manual": "手動重新整理",
+    "refresh.10s": "10 秒",
+    "refresh.30s": "30 秒",
+    "refresh.1m": "1 分鐘",
+    "refresh.5m": "5 分鐘",
+    "refresh.10m": "10 分鐘",
+
+    // models page
+    "models.title": "OpenClaw 接入模型列表",
+    "models.providerCount": "個 Provider",
+    "models.totalPrefix": "共",
+    "models.testAll": "🧪 測試全部模型",
+    "models.testingAll": "⏳ 測試中...",
+    "models.colModelId": "模型 ID",
+    "models.colName": "名稱",
+    "models.colAccessMode": "接入方式",
+    "models.accessModeApiKey": "api_key",
+    "models.accessModeAuth": "auth",
+    "models.colContext": "上下文視窗",
+    "models.colMaxOutput": "最大輸出",
+    "models.colInputType": "輸入類型",
+    "models.colReasoning": "推理",
+    "models.colInputToken": "Input Token",
+    "models.colOutputToken": "Output Token",
+    "models.colAvgResponse": "平均回應",
+    "models.colTest": "測試",
+    "models.noExplicitModels": "無顯式模型定義（透過 provider 名稱推斷）",
+    "models.defaultModel": "主模型",
+    "models.fallbackModels": "Fallback 模型",
+
+    // stats page
+    "stats.title": "訊息統計",
+    "stats.subtitle": "Token 消耗與回應時間分析",
+    "stats.totalInputToken": "總 Input Token",
+    "stats.totalOutputToken": "總 Output Token",
+    "stats.totalMessages": "總訊息數",
+    "stats.dataPeriod": "資料週期",
+    "stats.tokenConsumption": "🔢 Token 消耗",
+    "stats.avgResponseTime": "⏱️ 平均回應時間",
+    "stats.sessionList": "📋 會話列表",
+    "stats.home": "← 首頁",
+    "stats.missingAgent": "缺少 agent 參數",
+    "stats.noResponseData": "暫無回應時間資料",
+    "stats.selectAgent": "選擇一個機器人查看其訊息統計",
+    "stats.backToAgents": "← 返回機器人列表",
+
+    // sessions page
+    "sessions.title": "的會話列表",
+    "sessions.sessionCount": "個會話",
+    "sessions.totalToken": "總 Token",
+    "sessions.missingAgent": "缺少 agent 參數",
+    "sessions.type.main": "主會話",
+    "sessions.type.feishu-dm": "飛書私訊",
+    "sessions.type.feishu-group": "飛書群聊",
+    "sessions.type.discord-dm": "Discord 私訊",
+    "sessions.type.discord-channel": "Discord 頻道",
+    "sessions.type.telegram-dm": "Telegram 私訊",
+    "sessions.type.telegram-group": "Telegram 群聊",
+    "sessions.type.whatsapp-dm": "WhatsApp 私訊",
+    "sessions.type.whatsapp-group": "WhatsApp 群聊",
+    "sessions.type.cron": "排程任務",
+    "sessions.type.unknown": "未知",
+    "sessions.test": "測試",
+    "sessions.testing": "測試中...",
+    "sessions.testOk": "✅ 正常",
+    "sessions.testFail": "❌ 異常",
+    "sessions.testReply": "回覆",
+    "sessions.testTime": "耗時",
+    "sessions.context": "上下文",
+    "sessions.selectAgent": "選擇一個機器人查看其會話列表",
+    "sessions.testAll": "🧪 測試全部",
+    "sessions.testingAll": "⏳ 測試中...",
+    "sessions.testHint": "測試驗證 Agent 是否能回應，訊息不會出現在飛書／Discord 會話中",
+    "sessions.testAllResult": "測試完成",
+    "sessions.testAllOk": "通過",
+    "sessions.testAllFail": "失敗",
+    "sessions.backToAgents": "← 返回機器人列表",
+
+    // skills page
+    "skills.title": "🧩 技能管理",
+    "skills.count": "個技能",
+    "skills.builtin": "內建",
+    "skills.extension": "擴充",
+    "skills.custom": "自訂",
+    "skills.all": "全部",
+    "skills.search": "搜尋技能...",
+    "skills.showing": "顯示",
+    "skills.unit": "個",
+    "skills.noDesc": "無描述",
+    "skills.source.builtin": "內建",
+    "skills.source.custom": "自訂",
+
+    // gateway status
+    "gateway.healthy": "Gateway 運作正常",
+    "gateway.unhealthy": "Gateway 異常",
+    "gateway.fetchError": "無法檢查 Gateway 狀態",
+
+    // pixel office
+    "pixelOffice.title": "OpenClaw Agents 辦公室",
+    "pixelOffice.editMode": "編輯版面",
+    "pixelOffice.exitEdit": "退出編輯",
+    "pixelOffice.save": "儲存",
+    "pixelOffice.reset": "重設",
+    "pixelOffice.undo": "復原",
+    "pixelOffice.redo": "重做",
+    "pixelOffice.sound": "音效",
+    "pixelOffice.resetView": "重設視圖",
+    "pixelOffice.state.working": "工作中",
+    "pixelOffice.state.idle": "摸魚中",
+    "pixelOffice.state.offline": "下班了",
+    "pixelOffice.state.waiting": "等待中",
+    "pixelOffice.tempWorker": "臨時工",
+    "pixelOffice.tempWorker.source": "臨時工來源",
+    "pixelOffice.tempWorker.createdBy": "建立的 subagent",
+    "pixelOffice.broadcast.online": "上班了",
+    "pixelOffice.broadcast.offline": "下班了",
+    "pixelOffice.heatmap.title": "Agent 工作時間熱力圖",
+    "pixelOffice.heatmap.messages": "則訊息",
+    "pixelOffice.idleRank.title": "摸魚排行榜",
+    "pixelOffice.idleRank.online": "線上",
+    "pixelOffice.idleRank.active": "活躍",
+    "pixelOffice.idleRank.idle": "摸魚",
+    "pixelOffice.serverStatus.checking": "正在檢查伺服器狀態...",
+    "pixelOffice.serverStatus.healthy": "服務正常",
+    "pixelOffice.serverStatus.degraded": "服務退化",
+    "pixelOffice.serverStatus.down": "服務異常",
+    "pixelOffice.serverStatus.unknown": "狀態未知",
+    "pixelOffice.serverStatus.fetchFailed": "狀態檢查失敗",
+    "pixelOffice.gatewaySre.name": "值班工程師",
+    "pixelOffice.gatewaySre.statusLabel": "Gateway 狀態",
+    "pixelOffice.gatewaySre.responseMs": "檢查耗時",
+    "pixelOffice.gatewaySre.status.unknown": "監控中",
+    "pixelOffice.gatewaySre.status.healthy": "健康",
+    "pixelOffice.gatewaySre.status.degraded": "退化",
+    "pixelOffice.gatewaySre.status.down": "故障",
+    "pixelOffice.gatewaySre.tip.unknown": "正在等待閘道健康資料",
+    "pixelOffice.gatewaySre.tip.healthy": "Gateway healthy",
+    "pixelOffice.gatewaySre.tip.degraded": "Gateway degraded: latency high",
+    "pixelOffice.gatewaySre.tip.down": "Gateway down",
+  },
   zh: {
     // layout
     "site.title": "OpenClaw Bot Dashboard",
@@ -236,6 +496,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "pixelOffice.state.idle": "摸鱼中",
     "pixelOffice.state.offline": "下班了",
     "pixelOffice.state.waiting": "等待中",
+    "pixelOffice.tempWorker": "临时工",
+    "pixelOffice.tempWorker.source": "临时工来源",
+    "pixelOffice.tempWorker.createdBy": "创建的 subagent",
     "pixelOffice.broadcast.online": "上班了",
     "pixelOffice.broadcast.offline": "下班了",
     "pixelOffice.heatmap.title": "Agent 工作时间热力图",
@@ -493,6 +756,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "pixelOffice.state.idle": "Idle",
     "pixelOffice.state.offline": "Offline",
     "pixelOffice.state.waiting": "Waiting",
+    "pixelOffice.tempWorker": "Temp",
+    "pixelOffice.tempWorker.source": "Temp Worker Source",
+    "pixelOffice.tempWorker.createdBy": "created subagent",
     "pixelOffice.broadcast.online": "is online",
     "pixelOffice.broadcast.offline": "is offline",
     "pixelOffice.heatmap.title": "Agent Activity Heatmap",
@@ -534,11 +800,11 @@ const I18nContext = createContext<I18nContextType>({
 });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("zh");
+  const [locale, setLocaleState] = useState<Locale>("zh-TW");
 
   useEffect(() => {
     const saved = localStorage.getItem("locale") as Locale;
-    if (saved && saved !== "zh") {
+    if (saved && (saved === "zh-TW" || saved === "zh" || saved === "en")) {
       setLocaleState(saved);
     }
   }, []);
@@ -574,7 +840,8 @@ export function LanguageSwitcher() {
       onChange={(e) => setLocale(e.target.value as Locale)}
       className="px-3 py-1.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs font-medium hover:border-[var(--accent)] transition cursor-pointer text-[var(--text)]"
     >
-      <option value="zh">中文</option>
+      <option value="zh-TW">繁體中文</option>
+      <option value="zh">简体中文</option>
       <option value="en">English</option>
     </select>
   );

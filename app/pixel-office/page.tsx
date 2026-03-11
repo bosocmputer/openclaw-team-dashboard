@@ -23,6 +23,7 @@ import {
   playDoneSound,
   playBackgroundMusic,
   stopBackgroundMusic,
+  skipToNextTrack,
   unlockAudio,
   setSoundEnabled,
   isSoundEnabled,
@@ -210,7 +211,7 @@ let cachedNextCharacterId = 1
 let cachedPrevAgentStates = new Map<string, string>()
 
 export default function PixelOfficePage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const officeRef = useRef<OfficeState | null>(null)
@@ -374,6 +375,13 @@ export default function PixelOfficePage() {
     })
   }, [])
 
+  // Update OfficeState locale when language changes or when office finishes loading
+  useEffect(() => {
+    if (officeReady) {
+      officeRef.current?.setLocale(locale as 'zh-TW' | 'zh' | 'en')
+    }
+  }, [locale, officeReady])
+
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 767px)")
     const apply = () => setIsMobileViewport(mql.matches)
@@ -387,6 +395,7 @@ export default function PixelOfficePage() {
     const loadLayout = async () => {
       if (cachedOfficeState) {
         officeRef.current = cachedOfficeState
+        officeRef.current.setLocale(locale as 'zh-TW' | 'zh' | 'en')
         officeRef.current.updateGatewaySreState(gatewaySreRef.current)
         savedLayoutRef.current = cachedSavedLayout
         editorRef.current = cachedEditorState ?? editorRef.current
@@ -404,13 +413,13 @@ export default function PixelOfficePage() {
         const data = await res.json()
         if (data.layout) {
           const migrated = migrateLayoutColors(data.layout)
-          officeRef.current = new OfficeState(migrated)
+          officeRef.current = new OfficeState(migrated, locale as 'zh-TW' | 'zh' | 'en')
           savedLayoutRef.current = migrated
         } else {
-          officeRef.current = new OfficeState()
+          officeRef.current = new OfficeState(undefined, locale as 'zh-TW' | 'zh' | 'en')
         }
       } catch {
-        officeRef.current = new OfficeState()
+        officeRef.current = new OfficeState(undefined, locale as 'zh-TW' | 'zh' | 'en')
       }
       cachedOfficeState = officeRef.current
       officeRef.current?.updateGatewaySreState(gatewaySreRef.current)
@@ -947,7 +956,7 @@ export default function PixelOfficePage() {
       await fetch('/api/pixel-office/layout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: serializeLayout(office.layout),
+        body: JSON.stringify({ layout: office.layout }),
       })
       savedLayoutRef.current = office.layout
       editor.isDirty = false
@@ -1620,7 +1629,7 @@ export default function PixelOfficePage() {
         const subKey = sub.sessionKey ? `${sub.sessionKey}::${sub.toolId}` : sub.toolId
         expanded.push({
           agentId: `subagent:${agent.agentId}:${subKey}`,
-          name: `临时工 ${agent.agentId}`,
+          name: `${t('pixelOffice.tempWorker')} ${agent.agentId}`,
           emoji: agent.emoji,
           state: 'working',
           lastActive: agent.lastActive,
@@ -1637,9 +1646,9 @@ export default function PixelOfficePage() {
   const renderAgentChip = (agent: AgentActivity, mobileGrid = false) => {
     const isTempWorker = agent.agentId.startsWith('subagent:')
     const parentAgentIdFromKey = isTempWorker ? (agent.agentId.split(':')[1] || '') : ''
-    const tempWorkerOwner = isTempWorker ? (agent.name.replace(/^临时工\s*/, '') || parentAgentIdFromKey) : ''
+    const tempWorkerOwner = isTempWorker ? (agent.name.replace(new RegExp(`^${t('pixelOffice.tempWorker')}\\s*`), '') || parentAgentIdFromKey) : ''
     const chipTooltip = isTempWorker
-      ? `${tempWorkerOwner} agent创建的subagent`
+      ? `${tempWorkerOwner} ${t('pixelOffice.tempWorker.createdBy')}`
       : `agent id：${agent.agentId}`
     const chipToneClass = isTempWorker
       ? 'bg-red-900/45 border-red-700/80 text-red-100 animate-pulse'
@@ -1662,7 +1671,7 @@ export default function PixelOfficePage() {
           <span className={mobileGrid ? 'shrink-0 text-sm' : ''}>{agent.emoji}</span>
           {isTempWorker ? (
             <span className={`min-w-0 flex flex-col justify-center ${mobileGrid ? 'max-w-[4.6rem]' : 'max-w-[5.8rem]'} leading-none`}>
-              <span className={`${mobileGrid ? 'text-[10px]' : 'text-[12px]'} truncate`}>临时工</span>
+              <span className={`${mobileGrid ? 'text-[10px]' : 'text-[12px]'} truncate`}>{t('pixelOffice.tempWorker')}</span>
               <span className={`${mobileGrid ? 'text-[10px]' : 'text-[12px]'} truncate`}>{tempWorkerOwner}</span>
             </span>
           ) : (
@@ -1734,6 +1743,13 @@ export default function PixelOfficePage() {
               }`}>
               {soundOn ? '🔔' : '🔕'} {t('pixelOffice.sound')}
             </button>
+            {soundOn && (
+              <button onClick={skipToNextTrack}
+                className="px-3 py-1.5 text-xs rounded-lg border transition-colors bg-[var(--card)] border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--accent)]"
+                title="下一首">
+                ⏭
+              </button>
+            )}
             <button onClick={toggleEditMode}
               className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                 isEditMode ? 'bg-[var(--accent)]/10 border-[var(--accent)]/30 text-[var(--accent)]'
@@ -1838,11 +1854,11 @@ export default function PixelOfficePage() {
               <>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <span>{hoveredInfo.agent?.emoji}</span>
-                  <span className="font-semibold text-[var(--text)]">{hoveredInfo.isSubagent ? '临时工' : hoveredInfo.agent?.name}</span>
+                  <span className="font-semibold text-[var(--text)]">{hoveredInfo.isSubagent ? t('pixelOffice.tempWorker') : hoveredInfo.agent?.name}</span>
                 </div>
                 {hoveredInfo.isSubagent ? (
                   <div className="text-[var(--text-muted)]">
-                    {(hoveredInfo.parentAgentId || 'unknown')} agent创建的subagent
+                    {(hoveredInfo.parentAgentId || 'unknown')} {t('pixelOffice.tempWorker.createdBy')}
                   </div>
                 ) : (
                   <div className="space-y-0.5 text-[var(--text-muted)]">
@@ -1989,10 +2005,10 @@ export default function PixelOfficePage() {
               </button>
               <div className="flex items-center gap-1.5 mb-1.5">
                 <span>🧑‍🔧</span>
-                <span className="font-semibold text-[var(--text)]">临时工来源</span>
+                <span className="font-semibold text-[var(--text)]">{t('pixelOffice.tempWorker.source')}</span>
               </div>
               <div className="space-y-0.5 text-[var(--text-muted)]">
-                <div>{subagentCreatorInfo.parentAgentId} agent创建的subagent</div>
+                <div>{subagentCreatorInfo.parentAgentId} {t('pixelOffice.tempWorker.createdBy')}</div>
               </div>
             </div>
           )
@@ -2273,7 +2289,15 @@ export default function PixelOfficePage() {
               onFloorColorChange={handleFloorColorChange}
               onWallColorChange={handleWallColorChange}
               onSelectedFurnitureColorChange={handleSelectedFurnitureColorChange}
-              onFurnitureTypeChange={handleFurnitureTypeChange} />
+              onFurnitureTypeChange={handleFurnitureTypeChange}
+              onDeleteFurniture={() => {
+                const office = officeRef.current
+                const editor = editorRef.current
+                if (!office || !editor.selectedFurnitureUid) return
+                applyEdit(removeFurniture(office.layout, editor.selectedFurnitureUid))
+                editor.clearSelection()
+                forceEditorUpdate()
+              }} />
           </>
         )}
       </div>

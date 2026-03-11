@@ -111,6 +111,7 @@ interface EditorToolbarProps {
   onWallColorChange: (color: FloorColor) => void
   onSelectedFurnitureColorChange: (color: FloorColor | null) => void
   onFurnitureTypeChange: (type: string) => void
+  onDeleteFurniture: () => void
 }
 
 export function EditorToolbar({
@@ -118,7 +119,7 @@ export function EditorToolbar({
   selectedFurnitureUid, selectedFurnitureColor,
   floorColor, wallColor,
   onToolChange, onTileTypeChange, onFloorColorChange, onWallColorChange,
-  onSelectedFurnitureColorChange, onFurnitureTypeChange,
+  onSelectedFurnitureColorChange, onFurnitureTypeChange, onDeleteFurniture,
 }: EditorToolbarProps) {
   const [activeCategory, setActiveCategory] = useState<FurnitureCategory>('desks')
   const [showColor, setShowColor] = useState(false)
@@ -143,6 +144,7 @@ export function EditorToolbar({
   const floorPatterns = Array.from({ length: patternCount }, (_, i) => i + 1)
   const thumbSize = 36
 
+  const isSelectActive = activeTool === EditTool.SELECT
   const isFloorActive = activeTool === EditTool.TILE_PAINT || activeTool === EditTool.EYEDROPPER
   const isWallActive = activeTool === EditTool.WALL_PAINT
   const isEraseActive = activeTool === EditTool.ERASE
@@ -157,11 +159,25 @@ export function EditorToolbar({
     }}>
       {/* Tool row */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <button style={isSelectActive ? activeBtnStyle : btnStyle} onClick={() => onToolChange(EditTool.SELECT)} title="Select / move furniture">Select</button>
         <button style={isFloorActive ? activeBtnStyle : btnStyle} onClick={() => onToolChange(EditTool.TILE_PAINT)} title="Paint floor tiles">Floor</button>
         <button style={isWallActive ? activeBtnStyle : btnStyle} onClick={() => onToolChange(EditTool.WALL_PAINT)} title="Paint walls">Wall</button>
         <button style={isEraseActive ? activeBtnStyle : btnStyle} onClick={() => onToolChange(EditTool.ERASE)} title="Erase tiles">Erase</button>
         <button style={isFurnitureActive ? activeBtnStyle : btnStyle} onClick={() => onToolChange(EditTool.FURNITURE_PLACE)} title="Place furniture">Furniture</button>
       </div>
+
+      {/* Delete button when furniture is selected */}
+      {selectedFurnitureUid && (
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            style={{ ...btnStyle, background: 'rgba(255, 80, 80, 0.2)', border: '2px solid #ff5050', color: '#ff9090' }}
+            onClick={onDeleteFurniture}
+            title="Delete selected furniture (Delete key)"
+          >
+            🗑 Delete
+          </button>
+        </div>
+      )}
 
       {/* Floor sub-panel */}
       {isFloorActive && (
@@ -216,7 +232,7 @@ export function EditorToolbar({
           </div>
           <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 2 }}>
             {categoryItems.map(entry => {
-              const cached = getCachedSprite(entry.sprite, 2)
+              const hasSprite = entry.sprite.length > 0
               const isSelected = selectedFurnitureType === entry.type
               return (
                 <button key={entry.type} onClick={() => onFurnitureTypeChange(entry.type)} title={entry.label} style={{
@@ -224,17 +240,23 @@ export function EditorToolbar({
                   border: isSelected ? '2px solid #5a8cff' : '2px solid #4a4a6a',
                   borderRadius: 0, cursor: 'pointer', padding: 0, display: 'flex',
                   alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0,
+                  fontSize: hasSprite ? undefined : 20,
                 }}>
-                  <canvas ref={el => {
-                    if (!el) return
-                    const ctx = el.getContext('2d')
-                    if (!ctx) return
-                    const scale = Math.min(thumbSize / cached.width, thumbSize / cached.height) * 0.85
-                    el.width = thumbSize; el.height = thumbSize
-                    ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, thumbSize, thumbSize)
-                    const dw = cached.width * scale; const dh = cached.height * scale
-                    ctx.drawImage(cached, (thumbSize - dw) / 2, (thumbSize - dh) / 2, dw, dh)
-                  }} style={{ width: thumbSize, height: thumbSize }} />
+                  {hasSprite ? (
+                    <canvas ref={el => {
+                      if (!el) return
+                      const ctx = el.getContext('2d')
+                      if (!ctx) return
+                      const cached = getCachedSprite(entry.sprite, 2)
+                      const scale = Math.min(thumbSize / cached.width, thumbSize / cached.height) * 0.85
+                      el.width = thumbSize; el.height = thumbSize
+                      ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, thumbSize, thumbSize)
+                      const dw = cached.width * scale; const dh = cached.height * scale
+                      ctx.drawImage(cached, (thumbSize - dw) / 2, (thumbSize - dh) / 2, dw, dh)
+                    }} style={{ width: thumbSize, height: thumbSize }} />
+                  ) : (
+                    <span>{entry.emoji ?? '?'}</span>
+                  )}
                 </button>
               )
             })}

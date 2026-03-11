@@ -378,7 +378,7 @@ export function AgentCard({
       <div className="flex items-center gap-2 mb-1.5">
         <span className="text-xl">{agent.emoji}</span>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-[var(--text)]">{agent.name}</h3>
+          <h3 className="text-sm font-semibold text-[var(--text)]">{agent.name} <span className="font-normal text-[var(--text-muted)]">({agent.id})</span></h3>
         </div>
         <AgentStatusBadge state={agentState} t={t} />
       </div>

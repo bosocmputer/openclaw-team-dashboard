@@ -21,7 +21,6 @@ export interface AgentActivity {
 
 /** Track which subagent keys were active last sync, per parent agent */
 const prevSubagentKeys = new Map<string, Set<string>>()
-const TEMP_WORKER_LABEL = '临时工'
 
 /** Track previous agent states to detect offline→working transitions */
 const prevAgentStates = new Map<string, string>()
@@ -67,10 +66,10 @@ export function syncAgentsToOffice(
       office.addAgent(charId, undefined, undefined, undefined, undefined, wasOffline || isNew)
     }
 
-    // Set label (agent name or id)
+    // Set label (agent name with id in parentheses)
     const ch = office.characters.get(charId)
     if (ch) {
-      ch.label = activity.name || activity.agentId
+      ch.label = activity.name ? `${activity.name} (${activity.agentId})` : activity.agentId
     }
 
     switch (activity.state) {
@@ -99,11 +98,11 @@ export function syncAgentsToOffice(
           const subId = office.addSubagent(charId, subKey)
           office.setAgentActive(subId, true)
           const subCh = office.characters.get(subId)
-          if (subCh) subCh.label = TEMP_WORKER_LABEL
+          if (subCh) subCh.label = office.getTempWorkerLabel()
         } else {
           const subCh = office.characters.get(existingSubId)
           if (subCh) {
-            subCh.label = TEMP_WORKER_LABEL
+            subCh.label = office.getTempWorkerLabel()
             office.setAgentActive(existingSubId, true)
           }
         }

@@ -68,6 +68,27 @@ interface AllStats {
 
 type TimeRange = "daily" | "weekly" | "monthly";
 
+interface SubagentActivityEvent {
+  key: string;
+  text: string;
+  at: number;
+}
+
+interface SubagentInfo {
+  toolId: string;
+  label: string;
+  activityEvents?: SubagentActivityEvent[];
+}
+
+interface AgentActivityData {
+  agentId: string;
+  name: string;
+  emoji: string;
+  state: "idle" | "working" | "waiting" | "offline";
+  lastActive: number;
+  subagents?: SubagentInfo[];
+}
+
 type TFunc = (key: string) => string;
 
 let cachedHomeData: ConfigData | null = null;
@@ -198,6 +219,7 @@ export default function Home() {
   const [dmSessionResults, setDmSessionResults] = useState<Record<string, PlatformTestResult | null> | null>(null);
   const [testingDmSessions, setTestingDmSessions] = useState(false);
   const [agentStates, setAgentStates] = useState<Record<string, string>>(cachedHomeAgentStates);
+  const [agentActivity, setAgentActivity] = useState<AgentActivityData[] | null>(null);
 
   const RANGE_LABELS: Record<TimeRange, string> = { daily: t("range.daily"), weekly: t("range.weekly"), monthly: t("range.monthly") };
 
@@ -487,6 +509,21 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // Agent 任務活動輪詢 (30秒)
+  useEffect(() => {
+    const fetchActivity = () => {
+      fetch("/api/agent-activity", { cache: "no-store" })
+        .then(r => r.json())
+        .then(d => {
+          if (d.agents) setAgentActivity(d.agents);
+        })
+        .catch(() => {});
+    };
+    fetchActivity();
+    const timer = setInterval(fetchActivity, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   if (error && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -583,6 +620,52 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Agent 任務追蹤 */}
+      {agentActivity && agentActivity.some(a => a.state !== "offline") && (
+        <div className="mb-4 p-4 rounded-xl border border-[var(--border)] bg-[var(--card)]">
+          <h2 className="text-sm font-semibold text-[var(--text-muted)] mb-3">📋 Agent 任務追蹤</h2>
+          <div className="space-y-2">
+            {agentActivity
+              .filter(a => a.state !== "offline")
+              .map(agent => (
+                <div key={agent.agentId} className="flex items-start gap-3 p-3 rounded-lg bg-[var(--bg)] border border-[var(--border)]">
+                  <span className="text-lg leading-none mt-0.5">{agent.emoji || "🤖"}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-[var(--text)]">{agent.name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        agent.state === "working" ? "bg-emerald-500/20 text-emerald-400" :
+                        agent.state === "waiting" ? "bg-amber-500/20 text-amber-400" :
+                        "bg-[var(--border)] text-[var(--text-muted)]"
+                      }`}>
+                        {agent.state === "working" ? "執行中" : agent.state === "waiting" ? "等待中" : "閒置"}
+                      </span>
+                    </div>
+                    {agent.subagents && agent.subagents.length > 0 ? (
+                      <div className="space-y-1">
+                        {agent.subagents.map((sub, i) => (
+                          <div key={i} className="text-xs text-[var(--text-muted)]">
+                            <span className="text-[var(--accent)] mr-1">↳</span>
+                            <span className="font-medium text-[var(--text)]">{sub.label}</span>
+                            {sub.activityEvents && sub.activityEvents.length > 0 && (
+                              <span className="ml-2 opacity-70">— {sub.activityEvents[sub.activityEvents.length - 1].text}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[var(--text-muted)] opacity-60">無進行中的子任務</div>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">
+                    {agent.lastActive ? new Date(agent.lastActive).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }) : ""}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* 卡片墙 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

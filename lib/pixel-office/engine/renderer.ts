@@ -523,24 +523,7 @@ export function renderScene(
       const now = Date.now()
       // Blink effect for working state: use time-based alpha
       const labelAlpha = isWorking ? 0.7 + 0.3 * Math.sin(now / 300) : 1.0
-      let labelColor = ch.isSubagent
-        ? (isWorking ? `rgba(220,38,38,${labelAlpha})` : '#991B1B')
-        : (isWorking ? `rgba(34,197,94,${labelAlpha})` : '#FFD700')
-      if (ch.systemRoleType === 'gateway_sre') {
-        const state = ch.systemStatus ?? 'unknown'
-        if (state === 'healthy') {
-          const alpha = 0.65 + 0.3 * ((Math.sin(now / 760) + 1) / 2)
-          labelColor = `rgba(34,197,94,${alpha})`
-        } else if (state === 'degraded') {
-          const alpha = 0.45 + 0.55 * ((Math.sin(now / 220) + 1) / 2)
-          labelColor = `rgba(250,204,21,${alpha})`
-        } else if (state === 'down') {
-          const alpha = 0.28 + 0.72 * ((Math.sin(now / 110) + 1) / 2)
-          labelColor = `rgba(153,27,27,${alpha})`
-        } else {
-          labelColor = '#9CA3AF'
-        }
-      }
+      const labelColor = isWorking ? `rgba(34,197,94,${labelAlpha})` : '#FFD700'
       drawables.push({
         zY: charZY + 0.1,
         draw: (c) => {
@@ -548,8 +531,27 @@ export function renderScene(
           c.font = `bold ${fontSize}px sans-serif`
           c.textAlign = 'center'
           c.textBaseline = 'bottom'
-          c.fillStyle = 'rgba(0,0,0,0.9)'
-          c.fillText(ch.label, labelX, labelY + 1)
+          const textW = c.measureText(ch.label).width
+          const padX = 4 * zoom
+          const padY = 2 * zoom
+          const boxX = labelX - textW / 2 - padX
+          const boxY = labelY - fontSize - padY
+          const boxW = textW + padX * 2
+          const boxH = fontSize + padY * 2
+          const r = 3 * zoom
+          c.beginPath()
+          c.moveTo(boxX + r, boxY)
+          c.lineTo(boxX + boxW - r, boxY)
+          c.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + r, r)
+          c.lineTo(boxX + boxW, boxY + boxH - r)
+          c.arcTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH, r)
+          c.lineTo(boxX + r, boxY + boxH)
+          c.arcTo(boxX, boxY + boxH, boxX, boxY + boxH - r, r)
+          c.lineTo(boxX, boxY + r)
+          c.arcTo(boxX, boxY, boxX + r, boxY, r)
+          c.closePath()
+          c.fillStyle = 'rgba(0,0,0,0.55)'
+          c.fill()
           c.fillStyle = labelColor
           c.fillText(ch.label, labelX, labelY)
           c.restore()

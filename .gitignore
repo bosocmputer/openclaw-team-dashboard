@@ -3,3 +3,4 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 .idea
+/public/assets/pixel-office/*.mp3

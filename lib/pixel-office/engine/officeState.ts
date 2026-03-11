@@ -41,7 +41,106 @@ const LOBSTER_RAGE_DURATION_SEC = 10
 const LOBSTER_BUBBLE_LIFETIME_SEC = 0.8
 const LOBSTER_BUBBLE_SPAWN_RATE = 12
 const LOBSTER_HIT_RADIUS_PX = 6
-const CODE_SNIPPETS = [
+// ── Locale-aware text pools ─────────────────────────────────────────────────
+type OfficeLocale = 'zh-TW' | 'zh' | 'en'
+
+const CODE_SNIPPETS_ZH_TW = [
+  // JS/TS
+  'if (...)', 'else {', 'for (...)', 'return', 'async', 'await', 'try {', 'catch', 'import',
+  'const x =', '=> {', '...args', '() => {}', '[...arr]', '{ ...obj }', '===', '?.', '??',
+  // Python
+  'def fn():', 'self.', 'yield', 'lambda x:', '@decorator', '**kwargs', 'except:', 'raise',
+  // LLM / AI
+  'prompt:', 'tokens++', 'model.chat()', 'agent.run()', 'stream()', 'tool_use', 'thinking...',
+  'chat.completions', 'role: "user"', 'max_tokens=', 'temperature=0.7', 'messages.append()',
+  'stop_reason', 'tool_calls[]', 'system_prompt', 'embedding()', 'rag.search()', 'context[]',
+  // Prompt snippets
+  'You are a...', 'Step by step', 'Let me think', 'In summary:', 'For example:',
+  'Please fix...', 'Refactor this', 'Add tests for', 'Explain why', 'Review this PR',
+  'Write a func', 'Debug this', 'Optimize the', 'How to impl', 'Best practice',
+  'Chain of thought', 'Few-shot:', 'Zero-shot:', 'As an expert', 'Given context:',
+  // Dev slang
+  'LGTM', 'RTFM', 'WIP', 'FIXME:', 'TODO:', 'HACK:', 'nit:', '// why?!',
+  'git push -f', 'npm i npm i', 'works on my💻', 'ship it!',
+  '¯\\_(ツ)_/¯', 'seg fault', 'null ptr', '404', 'stack overflow',
+  'it compiles!', 'no repro', 'wontfix', 'by design', 'tech debt++',
+  'rebase hell', 'merge conflict', '// magic num', 'sudo !!', 'chmod 777',
+  'rm  /tmp/*',
+  // 台灣工程師行話
+  '// 別刪這行', '// 能動就好', '// 不知道為啥能動', '// 下次再說', '// 祖傳程式碼',
+  '在嗎？', '已讀不回', '先這樣吧', '回滾！', '又掛了',
+  '誰動了我的分支', '這不是bug', '需求又改了', '上線吧', '別碰那個檔案',
+  '跑不起來啊', '靠腰，重啟試試', '這是誰寫的垃圾！！！', '誰刪我程式碼了去你的', '又500了', '刪庫跑路再說！！！',
+  '這什麼三小需求', '怎麼又改規格', '去你的，為什麼又改', '靠腰，測試又炸了', '噢不，production掛了',
+  // OpenClaw CLI
+  'openclaw status', 'openclaw gateway start', 'openclaw gateway restart',
+  'openclaw logs', 'openclaw doctor', 'openclaw config get',
+  'openclaw message send', 'openclaw skills', 'openclaw models', 'openclaw update',
+]
+
+const SRE_BLACKWORDS_ZH_TW = [
+  '先調整！',
+  '先看監控',
+  '先看P99',
+  '先查閘道日誌',
+  '先查日誌紀錄',
+  '先重現',
+  '限流先開',
+  '還好',
+  '降載執行',
+  '先做降級',
+  '先擴容',
+  '先擴容頂住',
+  '找找文提',
+  '先重啟試試',
+  '先重啟閘道',
+  '先保SLA',
+  '先止血',
+  '核心鏈路優先',
+  '非核心先降級',
+  '觀察流量',
+  '開灰度觀察',
+  '先斷開故障節點',
+  '先摘流壞實例',
+  '熔斷值再收緊',
+  '重試風暴了',
+  '依賴超時傳染了',
+  '執行緒池爆了',
+  '連線池見底了',
+  '快取擊穿了',
+  '快取雪崩了',
+  'DB抖了',
+  'MQ堆積了',
+  '閘道扛不住了',
+  '上游在抖',
+  '下游撐不住了',
+  '觀察錯誤率',
+  '觀察超時率',
+  '抓出回應慢的',
+  'RT飆了',
+  'error budget快打穿了',
+  '先叫值班同學',
+  '先通知業務端',
+  '先發故障通告',
+  '記錄時間線，後面盤點',
+  '警報風暴來了',
+  '開戰情室',
+  '恢復中...',
+  'SLA 要頂住',
+  'MTTR 壓下來',
+  '這波別炸',
+]
+
+const PHOTO_COMMENTS_ZH_TW = [
+  '這張讚！', '構圖超棒', '光線好美', '色調很舒服', '學習了',
+  '出片了！', '桌布等級', '大片既視感', '這質感絕了', '散景好美',
+  '焦段選得好', '拍出了情緒', '太有電影感了', '超有氛圍',
+  '這光太絕了！！！', '這光太絕了！！！', '這光太絕了！！！',
+  '這光太絕了！！！', '這光太絕了！！！',
+  '不愧是台灣之光', '這是決定性瞬間！！！', '這個構圖絕了！',
+]
+
+const CODE_SNIPPETS_ZH = [
   // JS/TS
   'if (...)', 'else {', 'for (...)', 'return', 'async', 'await', 'try {', 'catch', 'import',
   'const x =', '=> {', '...args', '() => {}', '[...arr]', '{ ...obj }', '===', '?.', '??',
@@ -62,12 +161,7 @@ const CODE_SNIPPETS = [
   '¯\\_(ツ)_/¯', 'seg fault', 'null ptr', '404', 'stack overflow',
   'it compiles!', 'no repro', 'wontfix', 'by design', 'tech debt++',
   'rebase hell', 'merge conflict', '// magic num', 'sudo !!', 'chmod 777',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
-  'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*', 'rm -rf /*',
+    'rm  /tmp/*', 
   // 中文程序员黑话
   '// 别删这行', '// 能跑就行', '// 不知道为啥能跑', '// 下次再改', '// 祖传代码',
   '在吗？', '已读不回', '先这样吧', '回滚！', '又挂了',
@@ -78,7 +172,8 @@ const CODE_SNIPPETS = [
   'openclaw logs', 'openclaw doctor', 'openclaw config get',
   'openclaw message send', 'openclaw skills', 'openclaw models', 'openclaw update',
 ]
-const SRE_BLACKWORDS = [
+
+const SRE_BLACKWORDS_ZH = [
   '先止血！',
   '先看监控',
   '先看P99',
@@ -132,7 +227,7 @@ const SRE_BLACKWORDS = [
   '这波别炸',
 ]
 
-const PHOTO_COMMENTS = [
+const PHOTO_COMMENTS_ZH = [
   '毒！', '毒德大学', '德味！', '刀锐奶化', '空气切割感',
   '氛围感拉满', '这光太绝了', '构图教科书', '色彩太舒服了', '学习了',
   '出片了！', '壁纸级', '大片既视感', '这质感绝了', '奶油焦外',
@@ -142,7 +237,126 @@ const PHOTO_COMMENTS = [
   '不愧是中国布列松', '这是决定性瞬间！！！', '这个复杂构图绝了！',
 ]
 
-const TEMP_WORKER_LABEL = '临时工'
+const CODE_SNIPPETS_EN = [
+  // JS/TS
+  'if (...)', 'else {', 'for (...)', 'return', 'async', 'await', 'try {', 'catch', 'import',
+  'const x =', '=> {', '...args', '() => {}', '[...arr]', '{ ...obj }', '===', '?.', '??',
+  // Python
+  'def fn():', 'self.', 'yield', 'lambda x:', '@decorator', '**kwargs', 'except:', 'raise',
+  // LLM / AI
+  'prompt:', 'tokens++', 'model.chat()', 'agent.run()', 'stream()', 'tool_use', 'thinking...',
+  'chat.completions', 'role: "user"', 'max_tokens=', 'temperature=0.7', 'messages.append()',
+  'stop_reason', 'tool_calls[]', 'system_prompt', 'embedding()', 'rag.search()', 'context[]',
+  // Prompt snippets
+  'You are a...', 'Step by step', 'Let me think', 'In summary:', 'For example:',
+  'Please fix...', 'Refactor this', 'Add tests for', 'Explain why', 'Review this PR',
+  'Write a func', 'Debug this', 'Optimize the', 'How to impl', 'Best practice',
+  'Chain of thought', 'Few-shot:', 'Zero-shot:', 'As an expert', 'Given context:',
+  // Dev slang (EN flavor)
+  'LGTM', 'RTFM', 'WIP', 'FIXME:', 'TODO:', 'HACK:', 'nit:', '// why?!',
+  'git push -f', 'rm -rf node_', 'npm i npm i', 'works on my💻', 'ship it!',
+  '¯\\_(ツ)_/¯', 'seg fault', 'null ptr', '404', 'stack overflow',
+  'it compiles!', 'no repro', 'wontfix', 'by design', 'tech debt++',
+  'rebase hell', 'merge conflict', '// magic num', 'sudo !!', 'chmod 777',
+  'have you tried turning it off?', 'undefined is not a function',
+  'it was like this when I got here', 'not my code, not my problem',
+  'just needs a quick fix', 'we can refactor later', 'deadline is tomorrow',
+  'the tests pass locally', 'works in staging!', 'blame git log',
+  'rm  /tmp/*',
+  // OpenClaw CLI
+  'openclaw status', 'openclaw gateway start', 'openclaw gateway restart',
+  'openclaw logs', 'openclaw doctor', 'openclaw config get',
+  'openclaw message send', 'openclaw skills', 'openclaw models', 'openclaw update',
+]
+
+const SRE_BLACKWORDS_EN = [
+  'Stop the bleeding!',
+  'Check the dashboards',
+  'Check P99 latency',
+  'Check gateway logs',
+  'Check the logs',
+  'Reproduce it first',
+  'Enable rate limiting',
+  'Circuit break it',
+  'Initiate circuit break',
+  'Degrade gracefully',
+  'Protect the critical path',
+  'Scale up!',
+  'Scale up to hold the load',
+  'Roll back now',
+  'Restart and see',
+  'Restart the gateway',
+  'Protect the SLA',
+  'Fallback first',
+  'Critical path first',
+  'Degrade non-critical',
+  'Shed the load',
+  'Canary deploy',
+  'Bypass the bad node',
+  'Drain the bad instance',
+  'Tighten circuit threshold',
+  'Retry storm detected',
+  'Timeout is cascading',
+  'Thread pool exhausted',
+  'Connection pool empty',
+  'Cache penetration!',
+  'Cache avalanche!',
+  'DB is flapping',
+  'MQ backlog growing',
+  'Gateway overloaded',
+  'Upstream is flapping',
+  'Downstream back-pressure',
+  'Watch error rate',
+  'Watch timeout rate',
+  'Catch slow requests',
+  'RT is spiking',
+  'Error budget almost gone',
+  'Page the on-call',
+  'Sync with stakeholders',
+  'Send incident notice',
+  'Log the timeline',
+  'Alert storm incoming',
+  'Open the war room',
+  'Recovering...',
+  'Hold the SLA',
+  'Drive MTTR down',
+  "Don\'t let it blow up",
+]
+
+const PHOTO_COMMENTS_EN = [
+  'Stunning shot!', 'Love the bokeh', 'Perfect lighting', 'Great composition', 'Amazing colors',
+  'Wallpaper worthy!', 'Cinematic feel', 'Such atmosphere', 'Beautiful tones', 'Shot of the day!',
+  'Incredible depth', 'Mood is perfect', 'Frame it!', 'So filmic', 'Golden hour magic',
+  'Rule of thirds nailed', 'Negative space done right', 'The decisive moment!',
+  'This is art!!!', 'This is art!!!', 'This is art!!!', 'This is art!!!', 'This is art!!!',
+  'Not a photo, a painting!', 'The decisive moment!!!', 'Complex comp, nailed it!',
+]
+
+function getCodeSnippets(locale: OfficeLocale): string[] {
+  if (locale === 'zh-TW') return CODE_SNIPPETS_ZH_TW
+  if (locale === 'en') return CODE_SNIPPETS_EN
+  return CODE_SNIPPETS_ZH
+}
+function getSreBlackwords(locale: OfficeLocale): string[] {
+  if (locale === 'zh-TW') return SRE_BLACKWORDS_ZH_TW
+  if (locale === 'en') return SRE_BLACKWORDS_EN
+  return SRE_BLACKWORDS_ZH
+}
+function getPhotoComments(locale: OfficeLocale): string[] {
+  if (locale === 'zh-TW') return PHOTO_COMMENTS_ZH_TW
+  if (locale === 'en') return PHOTO_COMMENTS_EN
+  return PHOTO_COMMENTS_ZH
+}
+function getTempWorkerLabel(locale: OfficeLocale): string {
+  if (locale === 'zh-TW') return '臨時工'
+  if (locale === 'en') return 'Temp'
+  return '临时工'
+}
+function getGatewaySreLabel(locale: OfficeLocale): string {
+  if (locale === 'zh-TW') return '值班工程師'
+  if (locale === 'en') return 'On-Call SRE'
+  return '值班SRE'
+}
 const SUBAGENT_PRIORITY_SEAT_IDS = [
   'stool-r1', 'stool-r2', 'stool-r3', 'stool-r4',
   'stool-r5', 'stool-r6', 'stool-r7', 'stool-r8',
@@ -202,6 +416,24 @@ export class OfficeState {
   private gatewaySreError: string | null = null
   private gatewaySreResponseMs: number | null = null
   private gatewaySreCheckedAt: number | null = null
+  private locale: OfficeLocale = 'zh-TW'
+
+  getTempWorkerLabel(): string {
+    return getTempWorkerLabel(this.locale)
+  }
+
+  setLocale(locale: OfficeLocale) {
+    this.locale = locale
+    // Re-label the SRE character if it exists
+    const sre = this.characters.get(OfficeState.GATEWAY_SRE_ID)
+    if (sre) sre.label = getGatewaySreLabel(locale)
+    // Re-label any temp workers
+    for (const [, ch] of this.characters) {
+      if (ch.label === '临时工' || ch.label === '臨時工' || ch.label === 'Temp') {
+        ch.label = getTempWorkerLabel(locale)
+      }
+    }
+  }
 
   private buildRuntimeBlockedTiles(furniture: PlacedFurniture[]): Set<string> {
     // Keep right-office stool seats walkable so adding subagent stools
@@ -214,7 +446,8 @@ export class OfficeState {
     return getBlockedTiles(furniture, nonBlockingSeatTiles)
   }
 
-  constructor(layout?: OfficeLayout) {
+  constructor(layout?: OfficeLayout, locale: OfficeLocale = 'zh-TW') {
+    this.locale = locale
     this.layout = layout || createDefaultLayout()
     this.tileMap = layoutToTileMap(this.layout)
     this.seats = layoutToSeats(this.layout.furniture)
@@ -561,7 +794,7 @@ export class OfficeState {
     ch.isSystemRole = true
     ch.systemRoleType = 'gateway_sre'
     ch.systemStatus = this.gatewaySreStatus
-    ch.label = GATEWAY_SRE_LABEL
+    ch.label = getGatewaySreLabel(this.locale)
     ch.isActive = false
     ch.state = CharacterState.IDLE
     ch.seatId = null
@@ -1033,7 +1266,7 @@ export class OfficeState {
     }
     ch.isSubagent = true
     ch.parentAgentId = parentAgentId
-    ch.label = TEMP_WORKER_LABEL
+    ch.label = getTempWorkerLabel(this.locale)
     ch.matrixEffect = 'spawn'
     ch.matrixEffectTimer = 0
     ch.matrixEffectSeeds = matrixEffectSeeds()
@@ -1315,7 +1548,7 @@ export class OfficeState {
         ch.photoComments = ch.photoComments.filter(pc => pc.age < PHOTO_COMMENT_LIFETIME)
         if (ch.photoComments.length < 2 && Math.random() < dt * PHOTO_COMMENT_SPAWN_RATE) {
           ch.photoComments.push({
-            text: PHOTO_COMMENTS[Math.floor(Math.random() * PHOTO_COMMENTS.length)],
+            text: getPhotoComments(this.locale)[Math.floor(Math.random() * getPhotoComments(this.locale).length)],
             age: 0,
             x: (Math.random() - 0.5) * 16,
           })
@@ -1323,7 +1556,7 @@ export class OfficeState {
         // Spawn first one immediately
         if (ch.photoComments.length === 0) {
           ch.photoComments.push({
-            text: PHOTO_COMMENTS[Math.floor(Math.random() * PHOTO_COMMENTS.length)],
+            text: getPhotoComments(this.locale)[Math.floor(Math.random() * getPhotoComments(this.locale).length)],
             age: 0,
             x: (Math.random() - 0.5) * 16,
           })
@@ -1350,7 +1583,7 @@ export class OfficeState {
       if (isSreFirefighting && !ch.isCat && !ch.isLobster) {
         if (ch.codeSnippets.length < 3 && Math.random() < dt * SRE_BLACKWORD_SPAWN_RATE) {
           ch.codeSnippets.push({
-            text: SRE_BLACKWORDS[Math.floor(Math.random() * SRE_BLACKWORDS.length)],
+            text: getSreBlackwords(this.locale)[Math.floor(Math.random() * getSreBlackwords(this.locale).length)],
             age: 0,
             x: (Math.random() - 0.5) * 14,
             y: 0,
@@ -1360,7 +1593,7 @@ export class OfficeState {
         // Spawn new snippet randomly
         if (ch.codeSnippets.length < 2 && Math.random() < dt * CODE_SNIPPET_SPAWN_RATE) {
           ch.codeSnippets.push({
-            text: CODE_SNIPPETS[Math.floor(Math.random() * CODE_SNIPPETS.length)],
+            text: getCodeSnippets(this.locale)[Math.floor(Math.random() * getCodeSnippets(this.locale).length)],
             age: 0,
             x: (Math.random() - 0.5) * 20,
             y: 0,
