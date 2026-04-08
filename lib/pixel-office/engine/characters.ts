@@ -101,6 +101,9 @@ export function createCharacter(
     codeSnippets: [],
     photoComments: [],
     isViewingPhoto: false,
+    speechBubbles: [],
+    isThinking: false,
+    thinkingTimer: 0,
   }
 }
 

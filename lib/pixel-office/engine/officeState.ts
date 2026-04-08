@@ -417,6 +417,7 @@ export class OfficeState {
   private gatewaySreResponseMs: number | null = null
   private gatewaySreCheckedAt: number | null = null
   private locale: OfficeLocale = 'zh'
+  dataFlows: Array<{ fromId: number; toId: number; age: number; lifetime: number }> = []
 
   getTempWorkerLabel(): string {
     return getTempWorkerLabel(this.locale)
@@ -1525,6 +1526,32 @@ export class OfficeState {
     }
   }
 
+  /** Show a speech bubble with text above the character's head. */
+  pushSpeechBubble(id: number, text: string, lifetime = 5.0): void {
+    const ch = this.characters.get(id)
+    if (!ch || ch.isCat || ch.isLobster) return
+    const compact = text.replace(/\s+/g, ' ').trim()
+    if (!compact) return
+    const short = compact.length > 80 ? `${compact.slice(0, 79)}…` : compact
+    ch.speechBubbles.push({ text: short, age: 0, lifetime })
+    if (ch.speechBubbles.length > 2) ch.speechBubbles = ch.speechBubbles.slice(-2)
+  }
+
+  /** Toggle thinking (animated ...) indicator above character. */
+  setThinking(id: number, on: boolean): void {
+    const ch = this.characters.get(id)
+    if (!ch) return
+    ch.isThinking = on
+    ch.thinkingTimer = 0
+  }
+
+  /** Add an animated data flow line between two characters. */
+  addDataFlow(fromId: number, toId: number, lifetime = 3.0): void {
+    // Replace existing flow between same pair
+    this.dataFlows = this.dataFlows.filter(f => !(f.fromId === fromId && f.toId === toId))
+    this.dataFlows.push({ fromId, toId, age: 0, lifetime })
+  }
+
   update(dt: number): void {
     this.ensureGatewaySre()
     this.bugSystem.update(dt, this.bugWorldWidth, this.bugWorldHeight)
@@ -1620,6 +1647,17 @@ export class OfficeState {
         ch.codeSnippets = ch.codeSnippets.filter(s => s.age < CODE_SNIPPET_LIFETIME)
       }
 
+      // Tick speech bubbles
+      if (ch.speechBubbles.length > 0) {
+        for (const b of ch.speechBubbles) b.age += dt
+        ch.speechBubbles = ch.speechBubbles.filter(b => b.age < b.lifetime)
+      }
+
+      // Tick thinking animation
+      if (ch.isThinking) {
+        ch.thinkingTimer += dt
+      }
+
       if (isSreFirefighting && !ch.isCat && !ch.isLobster) {
         if (ch.codeSnippets.length < 3 && Math.random() < dt * SRE_BLACKWORD_SPAWN_RATE) {
           ch.codeSnippets.push({
@@ -1645,6 +1683,10 @@ export class OfficeState {
     for (const id of toDelete) {
       this.characters.delete(id)
     }
+
+    // Tick data flows
+    for (const f of this.dataFlows) f.age += dt
+    this.dataFlows = this.dataFlows.filter(f => f.age < f.lifetime)
   }
 
   getCharacters(): Character[] {

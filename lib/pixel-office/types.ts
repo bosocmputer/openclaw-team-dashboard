@@ -211,4 +211,7 @@ export interface Character {
   isSystemRole?: boolean
   systemRoleType?: 'gateway_sre'
   systemStatus?: 'unknown' | 'healthy' | 'degraded' | 'down'
+  speechBubbles: Array<{ text: string; age: number; lifetime: number }>
+  isThinking: boolean
+  thinkingTimer: number
 }

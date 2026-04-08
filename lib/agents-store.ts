@@ -252,3 +252,79 @@ export function completeResearchSession(sessionId: string, finalAnswer: string, 
   sessions[idx].finalAnswer = finalAnswer;
   writeResearch(sessions);
 }
+
+// --- Teams ---
+
+const TEAMS_FILE = path.join(process.env.HOME || "", ".openclaw-team", "teams.json");
+
+export interface Team {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  agentIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+function readTeams(): Team[] {
+  ensureDir(TEAMS_FILE);
+  if (!fs.existsSync(TEAMS_FILE)) return [];
+  try {
+    return JSON.parse(fs.readFileSync(TEAMS_FILE, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function writeTeams(teams: Team[]) {
+  ensureDir(TEAMS_FILE);
+  fs.writeFileSync(TEAMS_FILE, JSON.stringify(teams, null, 2));
+}
+
+export function listTeams(): Team[] {
+  return readTeams();
+}
+
+export function createTeam(data: { name: string; emoji: string; description: string; agentIds: string[] }): Team {
+  const teams = readTeams();
+  const now = new Date().toISOString();
+  const team: Team = {
+    id: crypto.randomUUID(),
+    name: data.name,
+    emoji: data.emoji,
+    description: data.description,
+    agentIds: data.agentIds,
+    createdAt: now,
+    updatedAt: now,
+  };
+  teams.push(team);
+  writeTeams(teams);
+  return team;
+}
+
+export function updateTeam(
+  id: string,
+  data: Partial<{ name: string; emoji: string; description: string; agentIds: string[] }>
+): Team | null {
+  const teams = readTeams();
+  const idx = teams.findIndex((t) => t.id === id);
+  if (idx === -1) return null;
+  const team = teams[idx];
+  if (data.name !== undefined) team.name = data.name;
+  if (data.emoji !== undefined) team.emoji = data.emoji;
+  if (data.description !== undefined) team.description = data.description;
+  if (data.agentIds !== undefined) team.agentIds = data.agentIds;
+  team.updatedAt = new Date().toISOString();
+  teams[idx] = team;
+  writeTeams(teams);
+  return team;
+}
+
+export function deleteTeam(id: string): boolean {
+  const teams = readTeams();
+  const filtered = teams.filter((t) => t.id !== id);
+  if (filtered.length === teams.length) return false;
+  writeTeams(filtered);
+  return true;
+}

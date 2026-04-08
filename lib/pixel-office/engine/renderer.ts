@@ -950,9 +950,232 @@ export function renderPhotoComments(
   }
 }
 
+// ── Research speech bubbles ─────────────────────────────────────
+
+const BUBBLE_SITTING_OFFSET_PX_ALT = 4
+
+export function renderSpeechBubbles(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (!ch.speechBubbles || ch.speechBubbles.length === 0) continue
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX_ALT : 0
+    const anchorX = Math.round(offsetX + ch.x * zoom)
+    const anchorY = Math.round(offsetY + (ch.y + sittingOff) * zoom - 28 * zoom)
+    const fontSize = Math.max(10, Math.round(3.8 * zoom))
+    const maxWidth = Math.round(60 * zoom)
+
+    ctx.save()
+    ctx.font = `${fontSize}px sans-serif`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+
+    let offsetYBubble = 0
+    for (const b of ch.speechBubbles) {
+      const progress = b.age / b.lifetime
+      let alpha = 1.0
+      if (b.age < 0.25) alpha = b.age / 0.25
+      if (progress > 0.75) alpha = (1 - progress) / 0.25
+      alpha = Math.max(0, Math.min(1, alpha))
+
+      // Word-wrap text
+      const words = b.text.split(' ')
+      const lines: string[] = []
+      let cur = ''
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w
+        if (ctx.measureText(test).width > maxWidth && cur) {
+          lines.push(cur)
+          cur = w
+        } else {
+          cur = test
+        }
+      }
+      if (cur) lines.push(cur)
+      if (lines.length > 3) lines.splice(3)
+
+      const lineH = fontSize + 2
+      const textH = lines.length * lineH
+      const textMaxW = Math.max(...lines.map(l => ctx.measureText(l).width))
+      const padX = 5 * zoom
+      const padY = 3 * zoom
+      const boxW = textMaxW + padX * 2
+      const boxH = textH + padY * 2
+      const boxX = anchorX - boxW / 2
+      const boxY = anchorY - boxH - offsetYBubble
+      const cr = 4 * zoom
+
+      ctx.globalAlpha = alpha * 0.92
+
+      // Background
+      ctx.fillStyle = 'rgba(15,23,42,0.88)'
+      ctx.beginPath()
+      ctx.moveTo(boxX + cr, boxY)
+      ctx.lineTo(boxX + boxW - cr, boxY)
+      ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + cr, cr)
+      ctx.lineTo(boxX + boxW, boxY + boxH - cr)
+      ctx.arcTo(boxX + boxW, boxY + boxH, boxX + boxW - cr, boxY + boxH, cr)
+      ctx.lineTo(boxX + cr, boxY + boxH)
+      ctx.arcTo(boxX, boxY + boxH, boxX, boxY + boxH - cr, cr)
+      ctx.lineTo(boxX, boxY + cr)
+      ctx.arcTo(boxX, boxY, boxX + cr, boxY, cr)
+      ctx.closePath()
+      ctx.fill()
+
+      // Border
+      ctx.strokeStyle = 'rgba(99,235,100,0.5)'
+      ctx.lineWidth = Math.max(1, zoom * 0.5)
+      ctx.stroke()
+
+      // Tail triangle
+      const tailX = anchorX
+      const tailY = boxY + boxH
+      ctx.fillStyle = 'rgba(15,23,42,0.88)'
+      ctx.beginPath()
+      ctx.moveTo(tailX - 3 * zoom, tailY)
+      ctx.lineTo(tailX + 3 * zoom, tailY)
+      ctx.lineTo(tailX, tailY + 4 * zoom)
+      ctx.closePath()
+      ctx.fill()
+
+      // Text
+      ctx.fillStyle = '#e2e8f0'
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], boxX + padX, boxY + padY + i * lineH)
+      }
+
+      offsetYBubble += boxH + 4 * zoom
+    }
+    ctx.restore()
+  }
+}
+
+/** Render animated ... thinking indicator above character */
+export function renderThinkingDots(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  const now = Date.now()
+  for (const ch of characters) {
+    if (!ch.isThinking) continue
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX_ALT : 0
+    const anchorX = Math.round(offsetX + ch.x * zoom)
+    const anchorY = Math.round(offsetY + (ch.y + sittingOff) * zoom - 22 * zoom)
+
+    ctx.save()
+    const dotR = Math.max(2, Math.round(1.8 * zoom))
+    const gap = dotR * 2.5
+    const totalW = 3 * dotR * 2 + 2 * gap
+    const boxPad = dotR * 1.8
+    const boxW = totalW + boxPad * 2
+    const boxH = dotR * 2 + boxPad * 2
+    const boxX = anchorX - boxW / 2
+    const boxY = anchorY - boxH
+    const cr = boxH / 2
+
+    // Background pill
+    ctx.fillStyle = 'rgba(15,23,42,0.82)'
+    ctx.beginPath()
+    ctx.moveTo(boxX + cr, boxY)
+    ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, cr)
+    ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, cr)
+    ctx.arcTo(boxX, boxY + boxH, boxX, boxY, cr)
+    ctx.arcTo(boxX, boxY, boxX + boxW, boxY, cr)
+    ctx.closePath()
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(250,204,21,0.5)'
+    ctx.lineWidth = Math.max(1, zoom * 0.4)
+    ctx.stroke()
+
+    // Three animated dots
+    for (let i = 0; i < 3; i++) {
+      const phase = ((now / 400 + i * 0.33) % 1)
+      const dotAlpha = 0.3 + 0.7 * Math.sin(phase * Math.PI)
+      const dotX = anchorX - gap + i * (dotR * 2 + gap)
+      const dotY = anchorY - dotR - boxPad
+      ctx.globalAlpha = dotAlpha
+      ctx.fillStyle = '#facc15'
+      ctx.beginPath()
+      ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+  }
+}
+
+/** Render animated dashed lines between communicating agents */
+export function renderDataFlows(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  dataFlows: Array<{ fromId: number; toId: number; age: number; lifetime: number }>,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  if (!dataFlows.length) return
+  const charMap = new Map(characters.map(c => [c.id, c]))
+  const now = Date.now()
+
+  for (const flow of dataFlows) {
+    const from = charMap.get(flow.fromId)
+    const to = charMap.get(flow.toId)
+    if (!from || !to) continue
+
+    const progress = flow.age / flow.lifetime
+    let alpha = 1.0
+    if (flow.age < 0.3) alpha = flow.age / 0.3
+    if (progress > 0.7) alpha = (1 - progress) / 0.3
+    alpha = Math.max(0, Math.min(1, alpha))
+
+    const x1 = offsetX + from.x * zoom
+    const y1 = offsetY + from.y * zoom - 8 * zoom
+    const x2 = offsetX + to.x * zoom
+    const y2 = offsetY + to.y * zoom - 8 * zoom
+
+    const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    if (dist < 4) continue
+
+    ctx.save()
+    ctx.globalAlpha = alpha * 0.7
+
+    // Animated dash offset
+    const dashLen = Math.max(6, zoom * 3)
+    const dashOffset = -(now / 60) % (dashLen * 2)
+
+    ctx.setLineDash([dashLen, dashLen])
+    ctx.lineDashOffset = dashOffset
+    ctx.strokeStyle = '#60a5fa'
+    ctx.lineWidth = Math.max(1.5, zoom * 0.8)
+    ctx.lineCap = 'round'
+
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+
+    // Animated packet dot moving along the line
+    const t = ((now / 800) % 1)
+    const px = x1 + (x2 - x1) * t
+    const py = y1 + (y2 - y1) * t
+    ctx.setLineDash([])
+    ctx.globalAlpha = alpha * 0.9
+    ctx.fillStyle = '#60a5fa'
+    ctx.beginPath()
+    ctx.arc(px, py, Math.max(2.5, zoom * 1.2), 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.restore()
+  }
+}
+
 export interface ButtonBounds {
-  /** Center X in device pixels */
-  cx: number
   /** Center Y in device pixels */
   cy: number
   /** Radius in device pixels */
@@ -1013,6 +1236,7 @@ export function renderFrame(
   contributions?: ContributionData,
   photograph?: HTMLImageElement,
   gatewayHealthy?: boolean,
+  dataFlows?: Array<{ fromId: number; toId: number; age: number; lifetime: number }>,
 ): { offsetX: number; offsetY: number } {
   // Clear
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
@@ -1054,6 +1278,17 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Data flow lines between communicating agents
+  if (dataFlows && dataFlows.length > 0) {
+    renderDataFlows(ctx, characters, dataFlows, offsetX, offsetY, zoom)
+  }
+
+  // Research speech bubbles (conversation text)
+  renderSpeechBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Thinking dots animation
+  renderThinkingDots(ctx, characters, offsetX, offsetY, zoom)
 
   // Editor overlays
   if (editor) {

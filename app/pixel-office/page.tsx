@@ -605,7 +605,7 @@ export default function PixelOfficePage() {
           editorRender, office.layout.tileColors, office.layout.cols, office.layout.rows,
           undefined,
           contributionsRef.current ?? undefined, photographRef.current ?? undefined,
-          gatewayHealthyRef.current)
+          gatewayHealthyRef.current, office.dataFlows)
 
         // Collect photo comment positions for DOM rendering
         const zoom = zoomRef.current
@@ -834,6 +834,34 @@ export default function PixelOfficePage() {
     fetchAgents()
     const interval = setInterval(fetchAgents, AGENT_ACTIVITY_POLL_INTERVAL_MS)
     return () => clearInterval(interval)
+  }, [])
+
+  // Research canvas animation events from PixelOfficeResearchBar
+  useEffect(() => {
+    const onThinking = (e: Event) => {
+      const { agentId, on } = (e as CustomEvent<{ agentId: string; on: boolean }>).detail
+      const charId = agentIdMapRef.current.get(agentId)
+      if (charId !== undefined) officeRef.current?.setThinking(charId, on)
+    }
+    const onSpeech = (e: Event) => {
+      const { agentId, text } = (e as CustomEvent<{ agentId: string; text: string }>).detail
+      const charId = agentIdMapRef.current.get(agentId)
+      if (charId !== undefined) officeRef.current?.pushSpeechBubble(charId, text)
+    }
+    const onDataFlow = (e: Event) => {
+      const { fromAgentId, toAgentId } = (e as CustomEvent<{ fromAgentId: string; toAgentId: string }>).detail
+      const fromId = agentIdMapRef.current.get(fromAgentId)
+      const toId = agentIdMapRef.current.get(toAgentId)
+      if (fromId !== undefined && toId !== undefined) officeRef.current?.addDataFlow(fromId, toId)
+    }
+    window.addEventListener('research-agent-thinking', onThinking as EventListener)
+    window.addEventListener('research-agent-speech', onSpeech as EventListener)
+    window.addEventListener('research-agent-dataflow', onDataFlow as EventListener)
+    return () => {
+      window.removeEventListener('research-agent-thinking', onThinking as EventListener)
+      window.removeEventListener('research-agent-speech', onSpeech as EventListener)
+      window.removeEventListener('research-agent-dataflow', onDataFlow as EventListener)
+    }
   }, [])
 
   // Poll agent session stats from /api/config
@@ -2341,6 +2369,10 @@ function PixelOfficeResearchBar() {
   const [finalAnswer, setFinalAnswer] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [status, setStatus] = useState('')
+  const [dataSource, setDataSource] = useState('none')
+  const [mcpEndpoint, setMcpEndpoint] = useState('')
+  const [dbConnectionString, setDbConnectionString] = useState('')
+  const [showDataSource, setShowDataSource] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -2384,7 +2416,10 @@ function PixelOfficeResearchBar() {
       const res = await fetch('/api/team-research/stream', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ question: question.trim(), agentIds: Array.from(selectedIds), dataSource: 'none' }),
+        body: JSON.stringify({ question: question.trim(), agentIds: Array.from(selectedIds), dataSource,
+          mcpEndpoint: dataSource === 'mcp' ? mcpEndpoint.trim() : undefined,
+          dbConnectionString: dataSource === 'database' ? dbConnectionString.trim() : undefined,
+        }),
         signal: abortRef.current.signal,
       })
       if (!res.body) throw new Error('No response body')
@@ -2406,8 +2441,38 @@ function PixelOfficeResearchBar() {
               setStatus(payload.message)
             } else if ('content' in payload && 'agentId' in payload) {
               setMessages(prev => [...prev, payload])
+              // Canvas: show speech bubble
+              if (payload.role !== 'thinking') {
+                window.dispatchEvent(new CustomEvent('research-agent-speech', {
+                  detail: { agentId: payload.agentId, text: payload.content.slice(0, 100) }
+                }))
+              }
+              // Canvas: thinking animation
+              if (payload.role === 'thinking') {
+                window.dispatchEvent(new CustomEvent('research-agent-thinking', {
+                  detail: { agentId: payload.agentId, on: true }
+                }))
+              } else {
+                window.dispatchEvent(new CustomEvent('research-agent-thinking', {
+                  detail: { agentId: payload.agentId, on: false }
+                }))
+              }
+              // Canvas: data flow lines during discussion
+              if (payload.role === 'chat') {
+                for (const otherId of selectedIds) {
+                  if (otherId !== payload.agentId) {
+                    window.dispatchEvent(new CustomEvent('research-agent-dataflow', {
+                      detail: { fromAgentId: payload.agentId, toAgentId: otherId }
+                    }))
+                  }
+                }
+              }
             } else if ('content' in payload && !('agentId' in payload)) {
               setFinalAnswer(payload.content)
+              // Clear all thinking states
+              for (const id of selectedIds) {
+                window.dispatchEvent(new CustomEvent('research-agent-thinking', { detail: { agentId: id, on: false } }))
+              }
             } else if ('totalTokens' in payload && 'agentId' in payload) {
               setAgentTokens(prev => ({ ...prev, [payload.agentId]: { total: payload.totalTokens } }))
             }
@@ -2418,6 +2483,10 @@ function PixelOfficeResearchBar() {
       if (e instanceof Error && e.name !== 'AbortError') setStatus(`Error: ${e.message}`)
     } finally {
       setRunning(false)
+      // Clear all thinking animations
+      for (const id of selectedIds) {
+        window.dispatchEvent(new CustomEvent('research-agent-thinking', { detail: { agentId: id, on: false } }))
+      }
     }
   }
 
@@ -2512,8 +2581,57 @@ function PixelOfficeResearchBar() {
         </div>
       )}
 
+      {/* Data source config row */}
+      {showDataSource && (
+        <div className="flex items-center gap-2 px-4 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+          <select
+            value={dataSource}
+            onChange={e => setDataSource(e.target.value)}
+            className="px-2 py-1 rounded border text-xs font-mono"
+            style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text)' }}
+          >
+            <option value="none">None</option>
+            <option value="mcp">🔌 MCP Server</option>
+            <option value="database">🗄 Database</option>
+          </select>
+          {dataSource === 'mcp' && (
+            <input
+              type="url"
+              value={mcpEndpoint}
+              onChange={e => setMcpEndpoint(e.target.value)}
+              placeholder="http://localhost:3100/mcp"
+              className="flex-1 px-2 py-1 rounded border text-xs font-mono outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            />
+          )}
+          {dataSource === 'database' && (
+            <input
+              type="text"
+              value={dbConnectionString}
+              onChange={e => setDbConnectionString(e.target.value)}
+              placeholder="mysql://user:pass@host:3306/db"
+              className="flex-1 px-2 py-1 rounded border text-xs font-mono outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'var(--border)', color: 'var(--text)' }}
+            />
+          )}
+        </div>
+      )}
+
       {/* Input row */}
       <div className="flex items-center gap-2 px-4 py-2.5">
+        {/* Data source toggle */}
+        <button
+          onClick={() => setShowDataSource(s => !s)}
+          title="Data Source"
+          className="px-2 py-1.5 rounded-lg border text-xs font-mono flex-shrink-0 transition-all"
+          style={{
+            borderColor: dataSource !== 'none' ? 'var(--accent)' : 'var(--border)',
+            color: dataSource !== 'none' ? 'var(--accent)' : 'var(--text-muted)',
+          }}
+        >
+          {dataSource === 'mcp' ? '🔌' : dataSource === 'database' ? '🗄' : '⚙️'}
+        </button>
+
         {/* Agent selector pills */}
         <div className="flex gap-1.5 flex-shrink-0">
           {agents.map(a => (

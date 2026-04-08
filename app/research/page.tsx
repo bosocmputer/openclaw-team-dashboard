@@ -48,8 +48,8 @@ const ROLE_COLOR: Record<string, string> = {
 
 const DATA_SOURCES = [
   { id: "none", label: "None — ใช้ความรู้ของ model" },
-  { id: "mcp", label: "MCP Server (coming soon)", disabled: true },
-  { id: "database", label: "Database (coming soon)", disabled: true },
+  { id: "mcp", label: "🔌 MCP Server" },
+  { id: "database", label: "🗄 MySQL / PostgreSQL" },
 ];
 
 export default function ResearchPage() {
@@ -57,6 +57,8 @@ export default function ResearchPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [question, setQuestion] = useState("");
   const [dataSource, setDataSource] = useState("none");
+  const [mcpEndpoint, setMcpEndpoint] = useState("");
+  const [dbConnectionString, setDbConnectionString] = useState("");
   const [messages, setMessages] = useState<ResearchMessage[]>([]);
   const [finalAnswer, setFinalAnswer] = useState("");
   const [status, setStatus] = useState("");
@@ -117,6 +119,8 @@ export default function ResearchPage() {
           question: question.trim(),
           agentIds: Array.from(selectedIds),
           dataSource,
+          mcpEndpoint: dataSource === "mcp" ? mcpEndpoint.trim() : undefined,
+          dbConnectionString: dataSource === "database" ? dbConnectionString.trim() : undefined,
         }),
         signal: abortRef.current.signal,
       });
@@ -269,11 +273,51 @@ export default function ResearchPage() {
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
               >
                 {DATA_SOURCES.map((s) => (
-                  <option key={s.id} value={s.id} disabled={s.disabled}>
+                  <option key={s.id} value={s.id}>
                     {s.label}
                   </option>
                 ))}
               </select>
+
+              {/* MCP endpoint input */}
+              {dataSource === "mcp" && (
+                <div className="mt-3 space-y-1.5">
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                    MCP Endpoint URL
+                  </div>
+                  <input
+                    type="url"
+                    value={mcpEndpoint}
+                    onChange={(e) => setMcpEndpoint(e.target.value)}
+                    placeholder="http://localhost:3100/mcp"
+                    className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono outline-none"
+                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
+                    context จาก MCP จะถูก inject เข้า prompt
+                  </div>
+                </div>
+              )}
+
+              {/* Database connection string */}
+              {dataSource === "database" && (
+                <div className="mt-3 space-y-1.5">
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                    Connection String
+                  </div>
+                  <input
+                    type="text"
+                    value={dbConnectionString}
+                    onChange={(e) => setDbConnectionString(e.target.value)}
+                    placeholder="mysql://user:pass@host:3306/db"
+                    className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono outline-none"
+                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
+                  />
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
+                    รองรับ MySQL / PostgreSQL (read-only)
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* History */}

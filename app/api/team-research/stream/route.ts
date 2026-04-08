@@ -116,10 +116,12 @@ function sseEvent(encoder: TextEncoder, event: string, data: unknown): Uint8Arra
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { question, agentIds, dataSource } = body as {
+  const { question, agentIds, dataSource, mcpEndpoint, dbConnectionString } = body as {
     question: string;
     agentIds: string[];
     dataSource?: string;
+    mcpEndpoint?: string;
+    dbConnectionString?: string;
   };
 
   if (!question || !agentIds?.length) {
@@ -130,6 +132,33 @@ export async function POST(req: NextRequest) {
   const selectedAgents = allAgents.filter((a) => agentIds.includes(a.id) && a.active);
   if (!selectedAgents.length) {
     return new Response(JSON.stringify({ error: "No active agents found" }), { status: 400 });
+  }
+
+  // Fetch extra context from data source before streaming
+  let dataSourceContext = "";
+  if (dataSource === "mcp" && mcpEndpoint) {
+    try {
+      const mcpRes = await fetch(mcpEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: question }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (mcpRes.ok) {
+        const mcpData = await mcpRes.json();
+        const mcpText = typeof mcpData === "string"
+          ? mcpData
+          : JSON.stringify(mcpData).slice(0, 4000);
+        dataSourceContext = `\n\n[MCP Context from ${mcpEndpoint}]:\n${mcpText}`;
+      }
+    } catch {
+      dataSourceContext = `\n\n[MCP endpoint ${mcpEndpoint} did not respond — proceeding without context]`;
+    }
+  } else if (dataSource === "database" && dbConnectionString) {
+    // Parse connection info for display — actual DB query requires server-side driver
+    // Provide connection info as context note so agents are aware of the data source
+    const safeConn = dbConnectionString.replace(/:[^:@]+@/, ":***@");
+    dataSourceContext = `\n\n[Database Context]: Connection configured at ${safeConn}. You may reference schemas or data you know about this database type when relevant to the question.`;
   }
 
   const session = createResearchSession({ question, agentIds, dataSource });
@@ -171,14 +200,10 @@ export async function POST(req: NextRequest) {
           appendResearchMessage(session.id, thinkingMsg);
           send("message", thinkingMsg);
 
-          const dataSourceNote = dataSource && dataSource !== "none"
-            ? `\n\nData source available: ${dataSource}. Use this context when relevant.`
-            : "";
-
           const result = await callLLM(agent.provider, agent.model, apiKey, agent.baseUrl, [
             {
               role: "system",
-              content: agent.soul + dataSourceNote,
+              content: agent.soul + dataSourceContext,
             },
             {
               role: "user",
