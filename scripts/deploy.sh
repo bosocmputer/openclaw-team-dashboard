@@ -23,12 +23,13 @@ echo '🔨 Building...'
 npm run build
 
 echo '🛑 Stopping old process...'
-pkill -f 'node.*server.js' 2>/dev/null || true
+pkill -f 'next-server' 2>/dev/null || true
+pkill -f 'next start' 2>/dev/null || true
+pkill -f 'node.*standalone.*server.js' 2>/dev/null || true
 sleep 2
 
 echo '▶️ Starting server on port $PORT...'
-cd .next/standalone
-PORT=$PORT nohup node server.js > /tmp/team-dashboard.log 2>&1 &
+PORT=$PORT nohup node .next/standalone/server.js > /tmp/team-dashboard.log 2>&1 &
 echo \$! > /tmp/team-dashboard.pid
 sleep 3
 
