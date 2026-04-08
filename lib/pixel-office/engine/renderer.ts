@@ -1176,6 +1176,8 @@ export function renderDataFlows(
 }
 
 export interface ButtonBounds {
+  /** Center X in device pixels */
+  cx: number
   /** Center Y in device pixels */
   cy: number
   /** Radius in device pixels */
