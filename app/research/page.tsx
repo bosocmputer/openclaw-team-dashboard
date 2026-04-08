@@ -30,6 +30,19 @@ interface AgentTokenState {
   totalTokens: number;
 }
 
+interface FullSession {
+  id: string;
+  question: string;
+  agentIds: string[];
+  dataSource?: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  messages: ResearchMessage[];
+  finalAnswer?: string;
+  totalTokens: number;
+}
+
 const ROLE_LABEL: Record<string, string> = {
   thinking: "💭 กำลังคิด",
   finding: "🔍 พบข้อมูล",
@@ -65,6 +78,8 @@ export default function ResearchPage() {
   const [running, setRunning] = useState(false);
   const [agentTokens, setAgentTokens] = useState<Record<string, AgentTokenState>>({});
   const [history, setHistory] = useState<{ id: string; question: string; status: string; startedAt: string }[]>([]);
+  const [viewingSession, setViewingSession] = useState<FullSession | null>(null);
+  const [loadingSession, setLoadingSession] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -181,6 +196,31 @@ export default function ResearchPage() {
     abortRef.current?.abort();
     setRunning(false);
     setStatus("หยุดการทำงาน");
+  };
+
+  const loadSession = async (id: string, questionText: string) => {
+    if (running) return;
+    setLoadingSession(true);
+    try {
+      const res = await fetch(`/api/team-research/${id}`);
+      const data = await res.json();
+      if (data.session) {
+        setViewingSession(data.session);
+        setQuestion(data.session.question);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingSession(false);
+    }
+  };
+
+  const clearViewingSession = () => {
+    setViewingSession(null);
+    setMessages([]);
+    setFinalAnswer("");
+    setStatus("");
+    setAgentTokens({});
   };
 
   return (
@@ -333,9 +373,13 @@ export default function ResearchPage() {
                   {history.map((h) => (
                     <button
                       key={h.id}
-                      onClick={() => setQuestion(h.question)}
-                      className="w-full text-left p-2 rounded-lg border transition-all hover:border-current"
-                      style={{ borderColor: "var(--border)" }}
+                      onClick={() => loadSession(h.id, h.question)}
+                      disabled={loadingSession}
+                      className="w-full text-left p-2 rounded-lg border transition-all hover:border-current disabled:opacity-40"
+                      style={{
+                        borderColor: viewingSession?.id === h.id ? "var(--accent)" : "var(--border)",
+                        background: viewingSession?.id === h.id ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
+                      }}
                     >
                       <div className="text-xs font-mono line-clamp-2" style={{ color: "var(--text)" }}>
                         {h.question}
@@ -343,6 +387,8 @@ export default function ResearchPage() {
                       <div className="text-xs font-mono mt-1" style={{ color: "var(--text-muted)" }}>
                         {h.status === "completed" ? "✅" : h.status === "error" ? "❌" : "⏳"}{" "}
                         {new Date(h.startedAt).toLocaleDateString("th")}
+                        {" · "}
+                        <span style={{ color: "var(--accent)" }}>ดูประวัติ</span>
                       </div>
                     </button>
                   ))}
@@ -353,138 +399,179 @@ export default function ResearchPage() {
 
           {/* Main panel */}
           <div className="flex-1 flex flex-col gap-4 min-w-0">
-            {/* Question input */}
-            <div
-              className="border rounded-xl p-4"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-            >
-              <div className="text-xs font-mono mb-2" style={{ color: "var(--text-muted)" }}>
-                คำถาม / โจทย์
+
+            {/* Viewing history banner */}
+            {viewingSession && (
+              <div
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl border text-xs font-mono"
+                style={{ borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)", background: "color-mix(in srgb, var(--accent) 7%, transparent)", color: "var(--text-muted)" }}
+              >
+                <span style={{ color: "var(--accent)" }}>📋 กำลังดูประวัติ</span>
+                <span className="flex-1 truncate">{viewingSession.question}</span>
+                <span>·</span>
+                <span>{new Date(viewingSession.startedAt).toLocaleString("th")}</span>
+                <span>·</span>
+                <span>{viewingSession.messages.length} ข้อความ</span>
+                {viewingSession.totalTokens > 0 && <span>· {viewingSession.totalTokens.toLocaleString()} tokens</span>}
+                <button
+                  onClick={clearViewingSession}
+                  className="ml-2 px-2 py-0.5 rounded border hover:opacity-100 opacity-60 transition-opacity"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  ✕ ปิด
+                </button>
               </div>
-              <textarea
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun();
-                }}
-                disabled={running}
-                rows={3}
-                placeholder="พิมพ์คำถามที่ต้องการให้ทีม agents ช่วยวิเคราะห์... (Cmd+Enter เพื่อส่ง)"
-                className="w-full bg-transparent font-mono text-sm resize-none outline-none"
-                style={{ color: "var(--text)" }}
-              />
-              <div className="flex items-center justify-between mt-3">
-                <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                  {selectedIds.size === 0 ? (
-                    <span className="text-red-400">⚠ เลือก agent อย่างน้อย 1 ตัว</span>
-                  ) : (
-                    <span>
-                      {selectedIds.size} agents พร้อม · Cmd+Enter เพื่อส่ง
-                    </span>
-                  )}
+            )}
+
+            {/* Question input — hide when viewing history */}
+            {!viewingSession && (
+              <div
+                className="border rounded-xl p-4"
+                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+              >
+                <div className="text-xs font-mono mb-2" style={{ color: "var(--text-muted)" }}>
+                  คำถาม / โจทย์
                 </div>
-                <div className="flex gap-2">
-                  {running && (
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun();
+                  }}
+                  disabled={running}
+                  rows={3}
+                  placeholder="พิมพ์คำถามที่ต้องการให้ทีม agents ช่วยวิเคราะห์... (Cmd+Enter เพื่อส่ง)"
+                  className="w-full bg-transparent font-mono text-sm resize-none outline-none"
+                  style={{ color: "var(--text)" }}
+                />
+                <div className="flex items-center justify-between mt-3">
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                    {selectedIds.size === 0 ? (
+                      <span className="text-red-400">⚠ เลือก agent อย่างน้อย 1 ตัว</span>
+                    ) : (
+                      <span>
+                        {selectedIds.size} agents พร้อม · Cmd+Enter เพื่อส่ง
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {running && (
+                      <button
+                        onClick={handleStop}
+                        className="px-4 py-1.5 rounded-lg text-xs font-mono border border-red-500/30 text-red-400"
+                      >
+                        ⏹ หยุด
+                      </button>
+                    )}
                     <button
-                      onClick={handleStop}
-                      className="px-4 py-1.5 rounded-lg text-xs font-mono border border-red-500/30 text-red-400"
+                      onClick={handleRun}
+                      disabled={!question.trim() || selectedIds.size === 0 || running}
+                      className="px-5 py-1.5 rounded-lg text-xs font-mono font-bold disabled:opacity-40 transition-all"
+                      style={{ background: "var(--accent)", color: "#000" }}
                     >
-                      ⏹ หยุด
+                      {running ? "กำลังทำงาน..." : "▶ ส่ง"}
                     </button>
-                  )}
-                  <button
-                    onClick={handleRun}
-                    disabled={!question.trim() || selectedIds.size === 0 || running}
-                    className="px-5 py-1.5 rounded-lg text-xs font-mono font-bold disabled:opacity-40 transition-all"
-                    style={{ background: "var(--accent)", color: "#000" }}
-                  >
-                    {running ? "กำลังทำงาน..." : "▶ ส่ง"}
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Status */}
-            {status && (
+            {status && !viewingSession && (
               <div className="text-xs font-mono px-3 py-2 rounded-lg border" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                 {running && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 mr-2 animate-pulse" />}
                 {status}
               </div>
             )}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto space-y-3 min-h-[200px]">
-              {messages.length === 0 && !running && (
-                <div
-                  className="text-center py-20 font-mono text-sm"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  ส่งคำถามเพื่อเริ่มต้น — agents จะวิเคราะห์และอภิปรายกัน
-                </div>
-              )}
-
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`border rounded-xl p-4 ${ROLE_COLOR[msg.role] ?? ""}`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">{msg.agentEmoji}</span>
-                    <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
-                      {msg.agentName}
-                    </span>
-                    <span
-                      className="text-xs font-mono px-2 py-0.5 rounded border"
-                      style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+            {/* Messages — live or historical */}
+            {(() => {
+              const displayMessages = viewingSession ? viewingSession.messages : messages;
+              const displayFinalAnswer = viewingSession ? (viewingSession.finalAnswer ?? "") : finalAnswer;
+              return (
+                <div className="flex-1 overflow-y-auto space-y-3 min-h-[200px]">
+                  {displayMessages.length === 0 && !running && !viewingSession && (
+                    <div
+                      className="text-center py-20 font-mono text-sm"
+                      style={{ color: "var(--text-muted)" }}
                     >
-                      {ROLE_LABEL[msg.role] ?? msg.role}
-                    </span>
-                    {msg.tokensUsed > 0 && (
-                      <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>
-                        {msg.tokensUsed.toLocaleString()} tokens
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="text-sm font-mono whitespace-pre-wrap leading-relaxed"
-                    style={{ color: "var(--text)" }}
-                  >
-                    {msg.content}
-                  </div>
-                </div>
-              ))}
-
-              {/* Final Answer */}
-              {finalAnswer && (
-                <div className="border-2 rounded-xl p-5" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
-                  <div className="font-mono font-bold text-sm mb-3" style={{ color: "var(--accent)" }}>
-                    ✅ คำตอบสุดท้าย
-                  </div>
-                  <div
-                    className="text-sm font-mono whitespace-pre-wrap leading-relaxed"
-                    style={{ color: "var(--text)" }}
-                  >
-                    {finalAnswer}
-                  </div>
-                  {Object.keys(agentTokens).length > 0 && (
-                    <div className="mt-4 pt-3 border-t flex flex-wrap gap-3" style={{ borderColor: "var(--border)" }}>
-                      {agents
-                        .filter((a) => agentTokens[a.id])
-                        .map((a) => (
-                          <div key={a.id} className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                            {a.emoji} {a.name}:{" "}
-                            <span style={{ color: "var(--accent)" }}>
-                              {agentTokens[a.id].totalTokens.toLocaleString()} tokens
-                            </span>
-                          </div>
-                        ))}
+                      ส่งคำถามเพื่อเริ่มต้น — agents จะวิเคราะห์และอภิปรายกัน
                     </div>
                   )}
-                </div>
-              )}
 
-              <div ref={bottomRef} />
-            </div>
+                  {displayMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`border rounded-xl p-4 ${ROLE_COLOR[msg.role] ?? ""}`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{msg.agentEmoji}</span>
+                        <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
+                          {msg.agentName}
+                        </span>
+                        <span
+                          className="text-xs font-mono px-2 py-0.5 rounded border"
+                          style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                        >
+                          {ROLE_LABEL[msg.role] ?? msg.role}
+                        </span>
+                        {msg.tokensUsed > 0 && (
+                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>
+                            {msg.tokensUsed.toLocaleString()} tokens
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className="text-sm font-mono whitespace-pre-wrap leading-relaxed"
+                        style={{ color: "var(--text)" }}
+                      >
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Final Answer */}
+                  {displayFinalAnswer && (
+                    <div className="border-2 rounded-xl p-5" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
+                      <div className="font-mono font-bold text-sm mb-3" style={{ color: "var(--accent)" }}>
+                        ✅ คำตอบสุดท้าย
+                      </div>
+                      <div
+                        className="text-sm font-mono whitespace-pre-wrap leading-relaxed"
+                        style={{ color: "var(--text)" }}
+                      >
+                        {displayFinalAnswer}
+                      </div>
+                      {!viewingSession && Object.keys(agentTokens).length > 0 && (
+                        <div className="mt-4 pt-3 border-t flex flex-wrap gap-3" style={{ borderColor: "var(--border)" }}>
+                          {agents
+                            .filter((a) => agentTokens[a.id])
+                            .map((a) => (
+                              <div key={a.id} className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                                {a.emoji} {a.name}:{" "}
+                                <span style={{ color: "var(--accent)" }}>
+                                  {agentTokens[a.id].totalTokens.toLocaleString()} tokens
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                      {viewingSession && (
+                        <button
+                          onClick={() => { clearViewingSession(); setQuestion(viewingSession.question); }}
+                          className="mt-3 text-xs font-mono px-3 py-1.5 rounded-lg border transition-colors"
+                          style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                        >
+                          🔄 ถามคำถามนี้อีกครั้ง
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  <div ref={bottomRef} />
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
