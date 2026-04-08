@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-type Provider = "anthropic" | "openai" | "gemini" | "ollama" | "custom";
+type Provider = "anthropic" | "openai" | "gemini" | "ollama" | "openrouter" | "custom";
 
 interface Agent {
   id: string;
@@ -30,6 +30,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   openai: "OpenAI",
   gemini: "Google Gemini",
   ollama: "Ollama (Local)",
+  openrouter: "OpenRouter",
   custom: "Custom / OpenAI-compatible",
 };
 
@@ -38,6 +39,7 @@ const PROVIDER_COLORS: Record<Provider, string> = {
   openai: "bg-green-500/20 text-green-300 border-green-500/30",
   gemini: "bg-blue-500/20 text-blue-300 border-blue-500/30",
   ollama: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  openrouter: "bg-rose-500/20 text-rose-300 border-rose-500/30",
   custom: "bg-gray-500/20 text-gray-300 border-gray-500/30",
 };
 

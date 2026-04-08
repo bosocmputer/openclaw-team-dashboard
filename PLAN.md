@@ -112,6 +112,68 @@ nohup npm start -- --port 3001 > /tmp/team-dashboard.log 2>&1 &
 
 ---
 
+## OpenClaw Gateway — การตั้งค่าและปัญหาที่พบ
+
+### Architecture
+
+- **Gateway process:** `openclaw-gateway` รันบน `127.0.0.1:18789` (loopback only)
+- **Public access:** ผ่าน Cloudflare Tunnel → `https://filed-visiting-idea-car.trycloudflare.com`
+  - ⚠️ URL นี้เปลี่ยนทุกครั้งที่ restart cloudflared (Quick Tunnel)
+  - Tunnel process pid ดูได้ด้วย `ps aux | grep cloudflared`
+- **Restart gateway:** `kill <pid>; nohup openclaw gateway run > /tmp/openclaw-gateway.log 2>&1 &`
+
+### Config ที่จำเป็น (~/.openclaw/openclaw.json)
+
+```json
+{
+  "gateway": {
+    "mode": "local",
+    "auth": { "mode": "token", "token": "..." },
+    "controlUi": {
+      "allowedOrigins": ["*"]
+    }
+  }
+}
+```
+
+> ถ้าไม่มี `controlUi.allowedOrigins` จะได้ error **"origin not allowed"** เมื่อเปิด Control UI ผ่าน Cloudflare
+
+### วิธีเปิด Control UI จากภายนอก
+
+ใช้ URL พร้อม token ฝังอยู่ (ไม่ต้องกรอก token ในหน้า UI):
+
+```text
+https://<cloudflare-tunnel-url>/#token=<gateway-token>
+```
+
+Token ดูได้จาก: `openclaw dashboard`
+
+### ปัญหา "pairing required" — สาเหตุและวิธีแก้
+
+| สาเหตุ | วิธีแก้ |
+| ------ | ------- |
+| ไม่มี `controlUi.allowedOrigins` ใน config | เพิ่ม `"allowedOrigins": ["*"]` แล้ว restart gateway |
+| เปิด URL โดยไม่มี `#token=...` | ใช้ URL ที่มี token ฝัง: `https://<tunnel>/#token=<token>` |
+| Browser ใหม่ที่เข้าครั้งแรกผ่าน Cloudflare ต้องรอ approve | `openclaw devices list` → `openclaw devices approve <requestId>` |
+
+### Device Management
+
+```bash
+# ดู pending + paired devices
+openclaw devices list
+
+# approve device ใหม่ที่รอ
+openclaw devices approve <requestId>
+```
+
+### ดู Sessions
+
+```bash
+openclaw sessions
+```
+
+---
+
 ## ความสัมพันธ์กับ openclaw-admin และ openclaw-api
 
 | Project | Port | ทำอะไร | ใช้ OpenClaw CLI? |

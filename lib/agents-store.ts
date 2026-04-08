@@ -8,7 +8,7 @@ const RESEARCH_FILE = path.join(process.env.HOME || "", ".openclaw-team", "resea
 const ENCRYPT_KEY = process.env.AGENT_ENCRYPT_KEY || "openclaw-team-default-key-32byte";
 const IV_LENGTH = 16;
 
-export type AgentProvider = "anthropic" | "openai" | "gemini" | "ollama" | "custom";
+export type AgentProvider = "anthropic" | "openai" | "gemini" | "ollama" | "openrouter" | "custom";
 
 export interface Agent {
   id: string;

@@ -47,6 +47,27 @@ async function callLLM(
     };
   }
 
+  if (provider === "openrouter") {
+    const url = "https://openrouter.ai/api/v1/chat/completions";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "HTTP-Referer": "https://openclaw-team-dashboard",
+        "X-Title": "OpenClaw Team Dashboard",
+      },
+      body: JSON.stringify({ model, messages, max_tokens: 2048 }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    return {
+      content: data.choices?.[0]?.message?.content ?? "",
+      inputTokens: data.usage?.prompt_tokens ?? 0,
+      outputTokens: data.usage?.completion_tokens ?? 0,
+    };
+  }
+
   if (provider === "openai" || provider === "custom") {
     const url = baseUrl ? `${baseUrl}/chat/completions` : "https://api.openai.com/v1/chat/completions";
     const res = await fetch(url, {
