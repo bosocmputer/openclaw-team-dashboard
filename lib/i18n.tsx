@@ -11,6 +11,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "site.desc": "查看所有 OpenClaw 機器人設定",
 
     // nav sidebar
+    "nav.teamAgents": "ทีม Agents",
+    "nav.research": "Research",
     "nav.overview": "總覽",
     "nav.agents": "機器人",
     "nav.models": "模型列表",
@@ -299,6 +301,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "site.desc": "查看所有 OpenClaw 机器人配置",
 
     // nav sidebar
+    "nav.teamAgents": "团队 Agents",
+    "nav.research": "Research",
     "nav.overview": "总览",
     "nav.agents": "机器人",
     "nav.models": "模型列表",
@@ -587,6 +591,8 @@ const translations: Record<Locale, Record<string, string>> = {
     "site.desc": "View all OpenClaw bot configurations",
 
     // nav sidebar
+    "nav.teamAgents": "Team Agents",
+    "nav.research": "Research",
     "nav.overview": "Overview",
     "nav.agents": "Bots",
     "nav.models": "Models",
