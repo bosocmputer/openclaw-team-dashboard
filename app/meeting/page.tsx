@@ -75,7 +75,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   custom: "#F59E0B",
 };
 
-const CANVAS_HEIGHT = 320;
 
 // ─── Canvas Drawing ───────────────────────────────────────────────────────────
 
@@ -437,6 +436,10 @@ export default function MeetingPage() {
   const [loadingSession, setLoadingSession] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
 
+  // Panel toggle state
+  const [showHistory, setShowHistory] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -525,6 +528,11 @@ export default function MeetingPage() {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
   }, [messages, viewingSession]);
+
+  // Auto-open transcript when meeting starts or history viewed
+  useEffect(() => {
+    if (messages.length > 0 || viewingSession) setShowTranscript(true);
+  }, [messages.length, viewingSession]);
 
   // ─── Actions ────────────────────────────────────────────────────────────────
 
@@ -678,398 +686,358 @@ export default function MeetingPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex overflow-hidden" style={{ height: "calc(100vh - 0px)" }}>
+    <div className="relative flex flex-col overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)" }}>
 
-      {/* ── Left sidebar: Meeting History ── */}
-      <aside
-        className="w-72 flex-shrink-0 border-r flex flex-col overflow-hidden"
-        style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      {/* ══ CANVAS — fills entire area ══ */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full"
+        style={{ imageRendering: "pixelated" }}
+      />
+
+      {/* ══ TOP BAR overlay ══ */}
+      <div
+        className="relative z-10 flex items-center gap-2 px-4 py-2 border-b flex-shrink-0"
+        style={{
+          borderColor: "rgba(60,70,140,0.4)",
+          background: "rgba(8,8,22,0.88)",
+          backdropFilter: "blur(8px)",
+        }}
       >
-        {/* Sidebar header */}
-        <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-          <div className="font-semibold text-sm">🏛 ห้องประชุม</div>
-          <div className="text-xs opacity-50 mt-0.5">ประวัติการประชุม Team Agents</div>
+        {/* Title */}
+        <span className="text-xs font-mono font-bold mr-1" style={{ color: "var(--accent)" }}>
+          🏛 MEETING ROOM
+        </span>
+
+        {/* Agent pills */}
+        <div className="flex gap-1.5 flex-wrap flex-1">
+          {agents.length === 0 ? (
+            <a href="/agents" className="text-xs font-mono px-2 py-0.5 border" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
+              + เพิ่ม agents
+            </a>
+          ) : (
+            agents.map((a) => {
+              const isSelected = selectedIds.has(a.id);
+              const isActive = activeAgentId === a.id;
+              const tokens = agentTokens[a.id];
+              const color = PROVIDER_COLORS[a.provider?.toLowerCase()] ?? "#6B7280";
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => toggleAgent(a.id)}
+                  disabled={running || !!viewingSession}
+                  title={`${a.name} — ${a.role}`}
+                  className="px-2 py-0.5 text-xs font-mono border transition-all"
+                  style={{
+                    borderColor: isActive ? color : isSelected ? `${color}99` : "rgba(60,70,120,0.35)",
+                    background: isActive ? `${color}33` : isSelected ? `${color}18` : "rgba(8,8,20,0.6)",
+                    color: isActive ? color : isSelected ? `${color}cc` : "#4a5068",
+                    boxShadow: isActive ? `0 0 8px ${color}55` : "none",
+                  }}
+                >
+                  {a.emoji} {a.name.length > 7 ? a.name.slice(0, 7) : a.name}
+                  {tokens ? <span style={{ opacity: 0.55 }}> {(tokens.totalTokens / 1000).toFixed(1)}k</span> : null}
+                  {isActive && <span className="ml-1 inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
+                </button>
+              );
+            })
+          )}
         </div>
 
-        {/* New meeting button */}
-        <div className="px-3 py-2 border-b" style={{ borderColor: "var(--border)" }}>
+        {/* Right controls */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {running && (
+            <span className="text-xs font-mono flex items-center gap-1" style={{ color: "#34d399" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              {status || "กำลังประชุม..."}
+            </span>
+          )}
+          {/* History toggle */}
           <button
-            onClick={() => {
-              closeHistory();
-              setMessages([]);
-              setFinalAnswer("");
-              setStatus("");
-              setAgentTokens({});
-              agentLastMsgRef.current = {};
-              currentAgendaRef.current = "";
-              setAgenda("");
-            }}
-            className="w-full py-2 text-xs font-medium border transition-colors font-mono"
+            onClick={() => setShowHistory((v) => !v)}
+            className="px-3 py-1.5 text-xs font-mono border transition-all"
             style={{
-              borderColor: "var(--accent)",
-              color: "var(--accent)",
-              background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+              borderColor: showHistory ? "var(--accent)" : "rgba(60,70,120,0.5)",
+              background: showHistory ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "rgba(8,8,20,0.6)",
+              color: showHistory ? "var(--accent)" : "#4a5068",
             }}
           >
-            + เริ่มประชุมใหม่
+            📋 {sessions.length > 0 ? sessions.length : ""} ประวัติ
+          </button>
+          {/* Transcript toggle */}
+          <button
+            onClick={() => setShowTranscript((v) => !v)}
+            className="px-3 py-1.5 text-xs font-mono border transition-all"
+            style={{
+              borderColor: showTranscript ? "var(--accent)" : "rgba(60,70,120,0.5)",
+              background: showTranscript ? "color-mix(in srgb, var(--accent) 15%, transparent)" : "rgba(8,8,20,0.6)",
+              color: showTranscript ? "var(--accent)" : "#4a5068",
+            }}
+          >
+            💬 {displayMessages.length > 0 ? displayMessages.length : ""} transcript
+            {(running || displayFinalAnswer) && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />}
           </button>
         </div>
+      </div>
 
-        {/* Search */}
-        <div className="px-3 py-2">
-          <input
-            type="text"
-            value={historySearch}
-            onChange={(e) => setHistorySearch(e.target.value)}
-            placeholder="ค้นหาประวัติ..."
-            className="w-full px-2 py-1.5 text-xs border bg-transparent focus:outline-none"
-            style={{ borderColor: "var(--border)", color: "var(--text)" }}
-          />
-        </div>
+      {/* ══ CANVAS container (flex-1 absorbs remaining height) ══ */}
+      <div className="relative flex-1 overflow-hidden">
 
-        {/* Session list */}
-        <div className="flex-1 overflow-y-auto px-1 pb-3">
-          {sessions.length === 0 && (
-            <div className="text-center py-8 text-xs opacity-40">
-              ยังไม่มีประวัติการประชุม
-            </div>
-          )}
-          {sessionsByDate.map((group) => (
-            <div key={group.label}>
-              <div className="px-3 py-1.5 text-xs font-medium opacity-40 sticky top-0" style={{ background: "var(--surface)" }}>
-                {group.label}
-              </div>
-              {group.items.map((s) => {
-                const isActive = viewingSession?.id === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => loadSession(s.id)}
-                    disabled={loadingSession}
-                    className="w-full text-left px-3 py-2.5 transition-colors"
-                    style={{
-                      background: isActive ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
-                      borderLeft: isActive ? "2px solid var(--accent)" : "2px solid transparent",
-                    }}
-                  >
-                    <div
-                      className="text-xs leading-snug line-clamp-2"
-                      style={{ color: isActive ? "var(--accent)" : "var(--text)" }}
-                    >
-                      {s.question}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 text-xs opacity-40">
-                      <span>{s.status === "completed" ? "✅" : s.status === "error" ? "❌" : "⏳"}</span>
-                      <span>{s.agentIds.length} agents</span>
-                      {s.totalTokens > 0 && <span>{s.totalTokens.toLocaleString()} tok</span>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* ── Main meeting area ── */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* ── Canvas: Pixel Art Meeting Room ── */}
-        <div className="flex-shrink-0 relative" style={{ height: `${CANVAS_HEIGHT}px` }}>
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full block"
-            style={{ imageRendering: "pixelated" }}
-          />
-          {/* Agent toggle pills (bottom overlay) */}
-          {!viewingSession && agents.length > 0 && (
-            <div
-              className="absolute bottom-2 left-0 right-0 flex gap-1.5 flex-wrap justify-center px-4"
-            >
-              {agents.map((a) => {
-                const isSelected = selectedIds.has(a.id);
-                const tokens = agentTokens[a.id];
-                const color = PROVIDER_COLORS[a.provider?.toLowerCase()] ?? "#6B7280";
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => toggleAgent(a.id)}
-                    disabled={running}
-                    title={`${a.name} — ${a.role}`}
-                    className="px-2 py-0.5 text-xs font-mono border transition-all"
-                    style={{
-                      borderColor: isSelected ? color : "rgba(80,90,150,0.35)",
-                      background: isSelected ? `${color}22` : "rgba(8,8,20,0.75)",
-                      color: isSelected ? color : "#555",
-                      backdropFilter: "blur(4px)",
-                    }}
-                  >
-                    {a.emoji} {a.name.length > 6 ? a.name.slice(0, 6) : a.name}
-                    {tokens ? <span style={{ opacity: 0.7 }}> {(tokens.totalTokens / 1000).toFixed(1)}k</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Viewing history banner */}
-        {viewingSession && (
+        {/* ── History panel — left drawer ── */}
+        {showHistory && (
           <div
-            className="flex items-center gap-3 px-5 py-2 text-xs border-b flex-shrink-0"
+            className="absolute left-0 top-0 bottom-0 z-20 flex flex-col border-r overflow-hidden"
             style={{
-              borderColor: "color-mix(in srgb, var(--accent) 25%, var(--border))",
-              background: "color-mix(in srgb, var(--accent) 6%, transparent)",
-              color: "var(--text-muted)",
+              width: "280px",
+              borderColor: "rgba(60,70,140,0.5)",
+              background: "rgba(6,6,18,0.92)",
+              backdropFilter: "blur(12px)",
             }}
           >
-            <span className="font-medium" style={{ color: "var(--accent)" }}>📋 บันทึกการประชุม</span>
-            <span>·</span>
-            <span>
-              {new Date(viewingSession.startedAt).toLocaleString("th-TH", {
-                day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-              })}
-            </span>
-            {viewingSession.completedAt && (
-              <>
-                <span>·</span>
-                <span>
-                  {Math.round((new Date(viewingSession.completedAt).getTime() - new Date(viewingSession.startedAt).getTime()) / 1000)}s
-                </span>
-              </>
-            )}
-            {viewingSession.totalTokens > 0 && (
-              <>
-                <span>·</span>
-                <span>{viewingSession.totalTokens.toLocaleString()} tokens</span>
-              </>
-            )}
-            <div className="flex gap-2 ml-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: "rgba(60,70,140,0.4)" }}>
+              <span className="text-xs font-mono font-bold" style={{ color: "var(--accent)" }}>📋 ประวัติการประชุม</span>
               <button
-                onClick={reuseQuestion}
-                className="px-3 py-0.5 border text-xs transition-colors"
-                style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                onClick={() => { closeHistory(); setMessages([]); setFinalAnswer(""); setStatus(""); setAgentTokens({}); agentLastMsgRef.current = {}; currentAgendaRef.current = ""; setAgenda(""); setShowTranscript(false); }}
+                className="text-xs font-mono px-2 py-0.5 border transition-all"
+                style={{ borderColor: "rgba(var(--accent-rgb),0.4)", color: "var(--accent)" }}
+                title="ประชุมใหม่"
               >
-                🔄 ประชุมซ้ำ
+                + ใหม่
               </button>
-              <button
-                onClick={closeHistory}
-                className="px-3 py-0.5 border text-xs opacity-60 hover:opacity-100 transition-opacity"
-                style={{ borderColor: "var(--border)" }}
-              >
-                ✕
-              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-3 py-2 border-b" style={{ borderColor: "rgba(60,70,140,0.3)" }}>
+              <input
+                type="text"
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                placeholder="ค้นหา..."
+                className="w-full px-2 py-1.5 text-xs font-mono border bg-transparent focus:outline-none"
+                style={{ borderColor: "rgba(60,70,140,0.4)", color: "#8898cc" }}
+              />
+            </div>
+
+            {/* Session list */}
+            <div className="flex-1 overflow-y-auto py-1">
+              {sessions.length === 0 && (
+                <div className="text-center py-8 text-xs font-mono" style={{ color: "#3a4060" }}>
+                  ยังไม่มีประวัติ
+                </div>
+              )}
+              {sessionsByDate.map((group) => (
+                <div key={group.label}>
+                  <div className="px-3 py-1 text-xs font-mono sticky top-0" style={{ color: "#3a4060", background: "rgba(6,6,18,0.95)" }}>
+                    {group.label}
+                  </div>
+                  {group.items.map((s) => {
+                    const isActive = viewingSession?.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => { loadSession(s.id); setShowTranscript(true); }}
+                        disabled={loadingSession}
+                        className="w-full text-left px-3 py-2 transition-colors"
+                        style={{
+                          background: isActive ? "rgba(var(--accent-rgb),0.1)" : "transparent",
+                          borderLeft: isActive ? "2px solid var(--accent)" : "2px solid transparent",
+                        }}
+                      >
+                        <div className="text-xs font-mono leading-snug line-clamp-2" style={{ color: isActive ? "var(--accent)" : "#6678aa" }}>
+                          {s.question}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs font-mono" style={{ color: "#3a4060" }}>
+                          <span>{s.status === "completed" ? "✅" : s.status === "error" ? "❌" : "⏳"}</span>
+                          <span>{s.agentIds.length}ag</span>
+                          {s.totalTokens > 0 && <span>{(s.totalTokens / 1000).toFixed(1)}k tok</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Transcript / Messages area */}
-        <div ref={transcriptRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-5 py-6 flex flex-col gap-4">
-
-            {/* Meeting title */}
-            {(currentAgenda || isLive) && (
-              <div
-                className="border-l-4 pl-4 py-2"
-                style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}
-              >
-                <div className="text-xs opacity-50 mb-1 font-medium uppercase tracking-wider">วาระการประชุม</div>
-                <div className="font-semibold text-sm leading-relaxed">{currentAgenda}</div>
-                {viewingSession && (
-                  <div className="text-xs opacity-40 mt-1">
-                    {viewingSession.messages.length} ข้อความ
-                    {viewingSession.finalAnswer ? " · มีมติที่ประชุม" : ""}
+        {/* ── Transcript panel — right drawer ── */}
+        {showTranscript && (
+          <div
+            className="absolute right-0 top-0 bottom-0 z-20 flex flex-col border-l overflow-hidden"
+            style={{
+              width: "380px",
+              borderColor: "rgba(60,70,140,0.5)",
+              background: "rgba(6,6,18,0.92)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "rgba(60,70,140,0.4)" }}>
+              <div className="flex-1 min-w-0">
+                {viewingSession ? (
+                  <div>
+                    <span className="text-xs font-mono font-bold" style={{ color: "var(--accent)" }}>📋 บันทึก</span>
+                    <span className="text-xs font-mono ml-2" style={{ color: "#4a5880" }}>
+                      {new Date(viewingSession.startedAt).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
                   </div>
+                ) : (
+                  <span className="text-xs font-mono font-bold" style={{ color: running ? "#34d399" : "var(--accent)" }}>
+                    {running ? "🔴 กำลังประชุม..." : "💬 Transcript"}
+                  </span>
                 )}
               </div>
-            )}
-
-            {/* Empty state */}
-            {displayMessages.length === 0 && !running && !viewingSession && (
-              <div className="text-center py-24">
-                <div className="text-4xl mb-4">🏛</div>
-                <div className="text-sm opacity-40">
-                  ยังไม่มีวาระ — กรอกคำถามด้านล่างแล้วกด &ldquo;เริ่มประชุม&rdquo;
-                </div>
-                <div className="text-xs opacity-25 mt-2">
-                  หรือคลิกประวัติทางซ้ายเพื่อดูบันทึกการประชุมเก่า
-                </div>
-              </div>
-            )}
-
-            {/* Running status */}
-            {running && messages.length === 0 && (
-              <div className="text-xs opacity-50 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                {status || "กำลังเริ่มต้นการประชุม..."}
-              </div>
-            )}
-
-            {/* Messages — meeting transcript style */}
-            {displayMessages.map((msg, i) => (
-              <div key={msg.id} className="flex gap-3 group">
-                {/* Avatar */}
-                <div className="flex-shrink-0 w-9 h-9 flex items-center justify-center border text-lg"
-                  style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
-                  {msg.agentEmoji}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-xs">{msg.agentName}</span>
-                    <span
-                      className={`text-xs px-1.5 py-0.5 border ${ROLE_COLOR[msg.role] ?? ""}`}
-                      style={{ borderColor: "var(--border)" }}
-                    >
-                      {ROLE_LABEL[msg.role] ?? msg.role}
-                    </span>
-                    {msg.tokensUsed > 0 && (
-                      <span className="text-xs opacity-30 ml-auto group-hover:opacity-60 transition-opacity">
-                        {msg.tokensUsed.toLocaleString()} tok
-                      </span>
-                    )}
-                    {msg.timestamp && (
-                      <span className="text-xs opacity-20 group-hover:opacity-50 transition-opacity">
-                        {new Date(msg.timestamp).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="text-sm leading-relaxed whitespace-pre-wrap"
-                    style={{ color: "var(--text)" }}
-                  >
-                    {msg.content}
-                  </div>
-                  {/* Divider between messages if different agent */}
-                  {i < displayMessages.length - 1 && displayMessages[i + 1].agentId !== msg.agentId && (
-                    <div className="mt-4" />
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {/* Running thinking indicator */}
-            {running && messages.length > 0 && status && (
-              <div className="flex items-center gap-2 text-xs opacity-50 pl-12">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                {status}
-              </div>
-            )}
-
-            {/* Meeting Resolution (Final Answer) */}
-            {displayFinalAnswer && (
-              <div
-                className="border-2 p-5 mt-2"
-                style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, var(--surface))" }}
-              >
-                <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--accent)" }}>
-                  ✅ มติที่ประชุม
-                </div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--text)" }}>
-                  {displayFinalAnswer}
-                </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                 {viewingSession && (
-                  <button
-                    onClick={reuseQuestion}
-                    className="mt-4 text-xs px-3 py-1.5 border transition-colors"
-                    style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
-                  >
-                    🔄 ประชุมซ้ำในหัวข้อนี้
+                  <button onClick={reuseQuestion} className="text-xs font-mono px-2 py-0.5 border transition-all" style={{ borderColor: "rgba(var(--accent-rgb),0.4)", color: "var(--accent)" }}>
+                    🔄 ใช้ซ้ำ
                   </button>
                 )}
+                {viewingSession && (
+                  <button onClick={closeHistory} className="text-xs font-mono px-2 py-0.5 border" style={{ borderColor: "rgba(60,70,120,0.4)", color: "#4a5068" }}>
+                    ✕
+                  </button>
+                )}
+                <button onClick={() => setShowTranscript(false)} className="text-xs font-mono px-2 py-0.5 border" style={{ borderColor: "rgba(60,70,120,0.4)", color: "#4a5068" }}>
+                  ›
+                </button>
+              </div>
+            </div>
+
+            {/* Agenda bar */}
+            {currentAgenda && (
+              <div className="px-3 py-2 border-b flex-shrink-0" style={{ borderColor: "rgba(60,70,140,0.3)", borderLeft: "3px solid var(--accent)" }}>
+                <div className="text-xs font-mono leading-snug" style={{ color: "#7088cc" }}>{currentAgenda}</div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* ── Input area — only when not viewing history ── */}
+            {/* Messages */}
+            <div ref={transcriptRef} className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3">
+              {displayMessages.length === 0 && !running && (
+                <div className="text-center py-12 text-xs font-mono" style={{ color: "#3a4060" }}>
+                  ยังไม่มีข้อความ
+                </div>
+              )}
+              {running && displayMessages.length === 0 && (
+                <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "#34d399" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  {status || "กำลังเริ่ม..."}
+                </div>
+              )}
+              {displayMessages.map((msg, i) => (
+                <div key={msg.id} className="group">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-base">{msg.agentEmoji}</span>
+                    <span className="text-xs font-mono font-bold" style={{ color: "#8898cc" }}>{msg.agentName}</span>
+                    <span className={`text-xs font-mono px-1 border ${ROLE_COLOR[msg.role] ?? ""}`} style={{ borderColor: "rgba(60,70,120,0.4)", fontSize: "9px" }}>
+                      {ROLE_LABEL[msg.role] ?? msg.role}
+                    </span>
+                    <span className="text-xs font-mono ml-auto opacity-0 group-hover:opacity-50 transition-opacity" style={{ color: "#3a4060" }}>
+                      {msg.tokensUsed > 0 ? `${msg.tokensUsed.toLocaleString()}t` : ""}
+                    </span>
+                  </div>
+                  <div className="text-xs font-mono leading-relaxed whitespace-pre-wrap pl-6" style={{ color: "#6676aa" }}>
+                    {msg.content}
+                  </div>
+                  {i < displayMessages.length - 1 && displayMessages[i + 1].agentId !== msg.agentId && (
+                    <div className="mt-2 border-t" style={{ borderColor: "rgba(40,50,100,0.3)" }} />
+                  )}
+                </div>
+              ))}
+              {running && displayMessages.length > 0 && status && (
+                <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "#34d399" }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  {status}
+                </div>
+              )}
+
+              {/* Final answer */}
+              {displayFinalAnswer && (
+                <div className="border p-3 mt-2" style={{ borderColor: "rgba(var(--accent-rgb),0.5)", background: "rgba(var(--accent-rgb),0.06)" }}>
+                  <div className="text-xs font-mono font-bold mb-2" style={{ color: "var(--accent)" }}>✅ มติที่ประชุม</div>
+                  <div className="text-xs font-mono leading-relaxed whitespace-pre-wrap" style={{ color: "#8898cc" }}>
+                    {displayFinalAnswer}
+                  </div>
+                  {viewingSession && (
+                    <button onClick={reuseQuestion} className="mt-3 text-xs font-mono px-2 py-1 border" style={{ borderColor: "rgba(var(--accent-rgb),0.4)", color: "var(--accent)" }}>
+                      🔄 ประชุมซ้ำ
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Bottom input overlay ── */}
         {!viewingSession && (
           <div
-            className="border-t flex-shrink-0"
-            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+            className="absolute bottom-0 left-0 right-0 z-10 border-t"
+            style={{
+              borderColor: "rgba(60,70,140,0.4)",
+              background: "rgba(6,6,18,0.9)",
+              backdropFilter: "blur(8px)",
+            }}
           >
-            {/* Data source config row */}
+            {/* Data source config */}
             {(dataSource !== "none") && (
-              <div className="px-5 pt-3 flex items-center gap-2">
+              <div className="px-4 pt-2 flex gap-2">
                 {dataSource === "mcp" && (
-                  <input
-                    type="url"
-                    value={mcpEndpoint}
-                    onChange={(e) => setMcpEndpoint(e.target.value)}
-                    placeholder="MCP Endpoint: http://localhost:3100/mcp"
-                    className="flex-1 px-3 py-1.5 border text-xs bg-transparent focus:outline-none"
-                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
-                  />
+                  <input type="url" value={mcpEndpoint} onChange={(e) => setMcpEndpoint(e.target.value)}
+                    placeholder="MCP: http://localhost:3100/mcp"
+                    className="flex-1 px-2 py-1 text-xs font-mono border bg-transparent focus:outline-none"
+                    style={{ borderColor: "rgba(60,70,140,0.5)", color: "#6678aa" }} />
                 )}
                 {dataSource === "database" && (
-                  <input
-                    type="text"
-                    value={dbConnectionString}
-                    onChange={(e) => setDbConnectionString(e.target.value)}
-                    placeholder="Connection: mysql://user:pass@host:3306/db"
-                    className="flex-1 px-3 py-1.5 border text-xs bg-transparent focus:outline-none"
-                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
-                  />
+                  <input type="text" value={dbConnectionString} onChange={(e) => setDbConnectionString(e.target.value)}
+                    placeholder="mysql://user:pass@host:3306/db"
+                    className="flex-1 px-2 py-1 text-xs font-mono border bg-transparent focus:outline-none"
+                    style={{ borderColor: "rgba(60,70,140,0.5)", color: "#6678aa" }} />
                 )}
               </div>
             )}
 
-            {/* Main input row */}
-            <div className="flex items-end gap-3 px-5 py-3">
-              {/* Data source selector */}
+            <div className="flex items-end gap-2 px-4 py-2">
               <select
                 value={dataSource}
                 onChange={(e) => setDataSource(e.target.value)}
                 disabled={running}
-                className="px-2 py-2 text-xs border bg-transparent focus:outline-none flex-shrink-0"
-                style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 title="Data Source"
+                className="px-2 py-1.5 text-xs font-mono border bg-transparent focus:outline-none flex-shrink-0"
+                style={{ borderColor: "rgba(60,70,140,0.5)", color: "#5566aa" }}
               >
-                {DATA_SOURCES.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
-                ))}
+                {DATA_SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
 
-              {/* Agenda textarea */}
               <textarea
                 value={agenda}
                 onChange={(e) => setAgenda(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun();
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun(); }}
                 disabled={running}
                 rows={2}
-                placeholder="วาระการประชุม / คำถามสำหรับทีม agents... (Cmd+Enter เพื่อเริ่ม)"
-                className="flex-1 min-w-0 px-3 py-2 border text-sm bg-transparent resize-none focus:outline-none"
-                style={{
-                  borderColor: "var(--border)",
-                  color: "var(--text)",
-                  lineHeight: "1.5",
-                }}
+                placeholder="วาระการประชุม... (Cmd+Enter เพื่อเริ่ม)"
+                className="flex-1 min-w-0 px-3 py-2 border text-xs font-mono bg-transparent resize-none focus:outline-none"
+                style={{ borderColor: "rgba(60,70,140,0.5)", color: "#8898cc", lineHeight: "1.5" }}
               />
 
-              {/* Action buttons */}
-              <div className="flex flex-col gap-1.5 flex-shrink-0">
+              <div className="flex flex-col gap-1 flex-shrink-0">
                 {running ? (
-                  <button
-                    onClick={handleStop}
-                    className="px-4 py-2 text-xs border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
+                  <button onClick={handleStop} className="px-4 py-2 text-xs font-mono border" style={{ borderColor: "rgba(239,68,68,0.5)", color: "#f87171" }}>
                     ⏹ หยุด
                   </button>
                 ) : (
                   <button
                     onClick={handleRun}
                     disabled={!agenda.trim() || selectedIds.size === 0}
-                    className="px-5 py-2 text-xs font-semibold disabled:opacity-40 transition-all"
+                    className="px-5 py-2 text-xs font-mono font-bold disabled:opacity-30 transition-all"
                     style={{ background: "var(--accent)", color: "#000" }}
                   >
-                    ▶ เริ่มประชุม
+                    ▶ เริ่ม
                   </button>
                 )}
-                <div className="text-xs opacity-30 text-center">
-                  {selectedIds.size} agents
+                <div className="text-center text-xs font-mono" style={{ color: "#2a3050", fontSize: "9px" }}>
+                  {selectedIds.size}ag · Cmd+↵
                 </div>
               </div>
             </div>
