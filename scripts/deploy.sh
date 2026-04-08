@@ -30,11 +30,12 @@ echo '�🛑 Stopping old process...'
 pkill -f 'next-server' 2>/dev/null || true
 pkill -f 'next start' 2>/dev/null || true
 pkill -f 'node.*standalone.*server.js' 2>/dev/null || true
-sleep 2
+sleep 3
 
 echo '▶️ Starting server on port $PORT...'
-PORT=$PORT nohup node .next/standalone/server.js > /tmp/team-dashboard.log 2>&1 &
+nohup bash -c 'PORT=$PORT node .next/standalone/server.js >> /tmp/team-dashboard.log 2>&1' &
 echo \$! > /tmp/team-dashboard.pid
+sleep 5
 sleep 3
 
 STATUS=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$PORT/)
