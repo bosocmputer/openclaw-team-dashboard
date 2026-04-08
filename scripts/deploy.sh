@@ -33,8 +33,7 @@ pkill -f 'node.*standalone.*server.js' 2>/dev/null || true
 sleep 3
 
 echo '▶️ Starting server on port $PORT...'
-setsid nohup env PORT=$PORT node .next/standalone/server.js </dev/null >> /tmp/team-dashboard.log 2>&1 &
-echo \$! > /tmp/team-dashboard.pid
+bash -c 'set -m; nohup env PORT=$PORT node .next/standalone/server.js </dev/null >> /tmp/team-dashboard.log 2>&1 & disown' &
 sleep 5
 
 STATUS=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$PORT/)
