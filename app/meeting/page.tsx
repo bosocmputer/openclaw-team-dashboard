@@ -686,7 +686,7 @@ export default function MeetingPage() {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="relative flex flex-col overflow-hidden" style={{ height: "calc(100dvh - 3.5rem)" }}>
+    <div className="relative flex flex-col overflow-hidden h-[calc(100dvh-3.5rem)] md:h-full">
 
       {/* ══ CANVAS — fills entire area ══ */}
       <canvas
