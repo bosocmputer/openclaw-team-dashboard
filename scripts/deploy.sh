@@ -33,10 +33,9 @@ pkill -f 'node.*standalone.*server.js' 2>/dev/null || true
 sleep 3
 
 echo '▶️ Starting server on port $PORT...'
-nohup bash -c 'PORT=$PORT node .next/standalone/server.js >> /tmp/team-dashboard.log 2>&1' &
+nohup env PORT=$PORT node .next/standalone/server.js >> /tmp/team-dashboard.log 2>&1 & disown
 echo \$! > /tmp/team-dashboard.pid
 sleep 5
-sleep 3
 
 STATUS=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$PORT/)
 echo \"✅ HTTP Status: \$STATUS\"
