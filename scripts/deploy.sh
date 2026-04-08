@@ -22,7 +22,11 @@ npm install --production=false
 echo '🔨 Building...'
 npm run build
 
-echo '🛑 Stopping old process...'
+echo '� Copying static assets to standalone...'
+cp -r .next/static .next/standalone/.next/static
+cp -r public .next/standalone/public
+
+echo '�🛑 Stopping old process...'
 pkill -f 'next-server' 2>/dev/null || true
 pkill -f 'next start' 2>/dev/null || true
 pkill -f 'node.*standalone.*server.js' 2>/dev/null || true
