@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { updateTeam, deleteTeam } from "@/lib/agents-store";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
     const { name, emoji, description, agentIds } = body;
     const patch: Parameters<typeof updateTeam>[1] = {};
@@ -20,9 +20,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const ok = deleteTeam(id);
     if (!ok) return NextResponse.json({ error: "Team not found" }, { status: 404 });
     return NextResponse.json({ ok: true });
