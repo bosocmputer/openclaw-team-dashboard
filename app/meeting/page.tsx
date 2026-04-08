@@ -66,6 +66,352 @@ const DATA_SOURCES = [
   { id: "database", label: "🗄 MySQL / PostgreSQL" },
 ];
 
+const PROVIDER_COLORS: Record<string, string> = {
+  anthropic: "#E06B2E",
+  openai: "#10A37F",
+  gemini: "#4285F4",
+  ollama: "#7C3AED",
+  openrouter: "#FF6B6B",
+  custom: "#F59E0B",
+};
+
+const CANVAS_HEIGHT = 320;
+
+// ─── Canvas Drawing ───────────────────────────────────────────────────────────
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawFloor(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  const tile = 20;
+  for (let y = 0; y <= H; y += tile) {
+    for (let x = 0; x <= W; x += tile) {
+      const even = (Math.floor(x / tile) + Math.floor(y / tile)) % 2 === 0;
+      ctx.fillStyle = even ? "#111122" : "#161630";
+      ctx.fillRect(x, y, tile, tile);
+    }
+  }
+  ctx.strokeStyle = "#1c1c38";
+  ctx.lineWidth = 0.5;
+  for (let y = 0; y <= H; y += tile) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let x = 0; x <= W; x += tile) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+}
+
+function drawConferenceTable(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, rw: number, rh: number,
+) {
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 10;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, rw, rh, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#2a1406";
+  ctx.fill();
+  ctx.restore();
+
+  // Table edge
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rw, rh, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "#2a1406";
+  ctx.fill();
+
+  // Surface gradient
+  const grad = ctx.createRadialGradient(cx - rw * 0.3, cy - rh * 0.4, rw * 0.05, cx, cy, rw);
+  grad.addColorStop(0, "#7a5030");
+  grad.addColorStop(0.45, "#5c381a");
+  grad.addColorStop(1, "#2a1406");
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 3, rw - 5, rh - 5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Wood grain lines
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy - 3, rw - 5, rh - 5, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.strokeStyle = "rgba(0,0,0,0.15)";
+  ctx.lineWidth = 1;
+  for (let i = -3; i <= 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(cx + i * 14, cy - 3, rw * 0.35, (rh - 5) * 0.55, 0.08 * i, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Highlight glare
+  ctx.beginPath();
+  ctx.ellipse(cx - rw * 0.22, cy - rh * 0.38, rw * 0.28, rh * 0.14, -0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fill();
+}
+
+function drawChairAt(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, angle: number,
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  // Seat
+  ctx.fillStyle = "#252c3a";
+  roundRectPath(ctx, -8, -6, 16, 12, 3);
+  ctx.fill();
+  ctx.strokeStyle = "#3d4a60";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // Backrest
+  ctx.fillStyle = "#2e3848";
+  roundRectPath(ctx, -7, -13, 14, 6, 2);
+  ctx.fill();
+  ctx.strokeStyle = "#3d4a60";
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSpeechBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number, tipY: number, text: string, canvasW: number,
+) {
+  const maxW = 160;
+  const padding = 7;
+  ctx.font = "9px 'Courier New', monospace";
+
+  const words = text.replace(/\n/g, " ").split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxW - padding * 2) {
+      if (line) lines.push(line);
+      line = w;
+    } else line = test;
+  }
+  if (line) lines.push(line);
+  const show = lines.slice(-3);
+
+  const lh = 12;
+  const textW = Math.max(...show.map((l) => ctx.measureText(l).width));
+  const bw = Math.min(maxW, textW + padding * 2);
+  const bh = show.length * lh + padding * 2;
+  let bx = x - bw / 2;
+  const by = tipY - bh - 10;
+  bx = Math.max(4, Math.min(canvasW - bw - 4, bx));
+
+  ctx.fillStyle = "rgba(20,22,45,0.94)";
+  roundRectPath(ctx, bx, by, bw, bh, 5);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(80,100,200,0.55)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x - 5, tipY - 10);
+  ctx.lineTo(x + 5, tipY - 10);
+  ctx.lineTo(x, tipY - 2);
+  ctx.fillStyle = "rgba(20,22,45,0.94)";
+  ctx.fill();
+
+  ctx.fillStyle = "#c8d4f0";
+  ctx.font = "9px 'Courier New', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  show.forEach((l, i) => ctx.fillText(l, bx + bw / 2, by + padding + i * lh));
+}
+
+function drawThinkingBubble(
+  ctx: CanvasRenderingContext2D,
+  x: number, tipY: number, time: number,
+) {
+  const r = 15;
+  const cy = tipY - r - 6;
+  ctx.fillStyle = "rgba(20,22,45,0.92)";
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(80,100,200,0.45)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x - 4, tipY - 4);
+  ctx.lineTo(x + 4, tipY - 4);
+  ctx.lineTo(x, tipY - 1);
+  ctx.fillStyle = "rgba(20,22,45,0.92)";
+  ctx.fill();
+
+  for (let i = 0; i < 3; i++) {
+    const bounce = 0.5 + 0.5 * Math.sin(time * 0.004 + i * 1.1);
+    ctx.fillStyle = `rgba(150,170,255,${0.4 + bounce * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(x - 6 + i * 6, cy - bounce * 3, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawAgentAvatar(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  emoji: string, name: string, provider: string,
+  isActive: boolean, time: number,
+  lastMsg: string | null, canvasW: number,
+) {
+  const r = 22;
+  const color = PROVIDER_COLORS[provider?.toLowerCase()] ?? "#6B7280";
+
+  if (isActive) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 0.004);
+    ctx.beginPath();
+    ctx.arc(x, y, r + 10 + pulse * 6, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRgba(color, 0.12 + pulse * 0.18);
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+  ctx.fillStyle = hexToRgba(color, 0.2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = hexToRgba(color, isActive ? 0.85 : 0.55);
+  ctx.fill();
+  ctx.strokeStyle = isActive ? color : hexToRgba(color, 0.7);
+  ctx.lineWidth = isActive ? 2 : 1;
+  ctx.stroke();
+
+  ctx.font = `${Math.round(r * 0.85)}px serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(emoji, x, y + 1);
+
+  ctx.font = `bold 8px 'Courier New', monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = isActive ? "#fff" : "#9ca3af";
+  const displayName = name.length > 9 ? name.slice(0, 9) + "…" : name;
+  ctx.fillText(displayName, x, y + r + 5);
+
+  if (isActive) {
+    if (lastMsg) drawSpeechBubble(ctx, x, y - r - 8, lastMsg, canvasW);
+    else drawThinkingBubble(ctx, x, y - r - 8, time);
+  }
+}
+
+function drawMeetingRoomScene(
+  ctx: CanvasRenderingContext2D,
+  W: number, H: number,
+  visibleAgents: Array<{ id: string; emoji: string; name: string; provider: string }>,
+  activeAgentId: string | null,
+  time: number,
+  agentLastMsg: Record<string, string>,
+  currentAgenda: string,
+) {
+  drawFloor(ctx, W, H);
+
+  // Top wall + baseboard
+  ctx.fillStyle = "#0c0d1a";
+  ctx.fillRect(0, 0, W, 28);
+  ctx.fillStyle = "#18183a";
+  ctx.fillRect(0, 28, W, 3);
+
+  // Room label
+  ctx.font = "bold 9px 'Courier New', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if (currentAgenda) {
+    ctx.fillStyle = "rgba(110,130,210,0.75)";
+    const label = currentAgenda.length > 60 ? currentAgenda.slice(0, 60) + "…" : currentAgenda;
+    ctx.fillText("📋 " + label, W / 2, 15);
+  } else {
+    ctx.fillStyle = "rgba(70,80,140,0.5)";
+    ctx.fillText("🏛  MEETING ROOM", W / 2, 15);
+  }
+
+  const cx = W / 2;
+  const cy = H * 0.5;
+  const rw = Math.min(W * 0.21, 125);
+  const rh = Math.min(H * 0.22, 58);
+  const seatRx = rw + 58;
+  const seatRy = rh + 50;
+  const n = visibleAgents.length;
+
+  // Chairs (behind agents)
+  if (n > 0) {
+    visibleAgents.forEach((_, i) => {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const ax = cx + Math.cos(angle) * seatRx;
+      const ay = cy + Math.sin(angle) * seatRy;
+      drawChairAt(ctx, ax, ay + 8, angle + Math.PI / 2);
+    });
+  }
+
+  // Conference table
+  drawConferenceTable(ctx, cx, cy, rw, rh);
+
+  // Center phone LED
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.fillStyle = "#17182e";
+  ctx.fill();
+  ctx.strokeStyle = "#2d374d";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const led = 0.5 + 0.5 * Math.sin(time * 0.002);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = activeAgentId
+    ? `rgba(52,211,153,${0.5 + led * 0.5})`
+    : "rgba(90,90,140,0.45)";
+  ctx.fill();
+
+  // Agents
+  if (n === 0) {
+    ctx.font = "11px 'Courier New', monospace";
+    ctx.fillStyle = "rgba(70,80,140,0.55)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("ยังไม่มี agents — ไปที่ /agents เพื่อเพิ่ม", W / 2, cy);
+  } else {
+    visibleAgents.forEach((agent, i) => {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const ax = cx + Math.cos(angle) * seatRx;
+      const ay = cy + Math.sin(angle) * seatRy;
+      const isActive = agent.id === activeAgentId;
+      const lastMsg = isActive ? (agentLastMsg[agent.id] ?? null) : null;
+      drawAgentAvatar(ctx, ax, ay, agent.emoji, agent.name, agent.provider, isActive, time, lastMsg, W);
+    });
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MeetingPage() {
@@ -93,6 +439,61 @@ export default function MeetingPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Canvas refs
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number | null>(null);
+  const agentLastMsgRef = useRef<Record<string, string>>({});
+  const agentsRef = useRef(agents);
+  const selectedIdsRef = useRef(selectedIds);
+  const activeAgentIdRef = useRef(activeAgentId);
+  const viewingSessionRef = useRef(viewingSession);
+  const currentAgendaRef = useRef("");
+
+  // ─── Sync refs ──────────────────────────────────────────────────────────────
+  useEffect(() => { agentsRef.current = agents; }, [agents]);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  useEffect(() => { activeAgentIdRef.current = activeAgentId; }, [activeAgentId]);
+  useEffect(() => { viewingSessionRef.current = viewingSession; }, [viewingSession]);
+  useEffect(() => { currentAgendaRef.current = agenda; }, [agenda]);
+  useEffect(() => {
+    for (const msg of messages) {
+      agentLastMsgRef.current[msg.agentId] = msg.content;
+    }
+  }, [messages]);
+
+  // ─── Canvas animation loop ──────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const frame = (ts: number) => {
+      const W = canvas.clientWidth;
+      const H = canvas.clientHeight;
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+      }
+      if (W === 0 || H === 0) { animRef.current = requestAnimationFrame(frame); return; }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const vs = viewingSessionRef.current;
+      const allAgents = agentsRef.current;
+      const visibleAgents = vs
+        ? allAgents.filter((a) => vs.agentIds.includes(a.id))
+        : allAgents;
+      drawMeetingRoomScene(
+        ctx, W, H,
+        visibleAgents,
+        activeAgentIdRef.current,
+        ts,
+        agentLastMsgRef.current,
+        vs ? vs.question : currentAgendaRef.current,
+      );
+      animRef.current = requestAnimationFrame(frame);
+    };
+    animRef.current = requestAnimationFrame(frame);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Data fetching ──────────────────────────────────────────────────────────
 
@@ -154,7 +555,10 @@ export default function MeetingPage() {
 
   const reuseQuestion = () => {
     if (!viewingSession) return;
-    setAgenda(viewingSession.question);
+    const q = viewingSession.question;
+    setAgenda(q);
+    currentAgendaRef.current = q;
+    agentLastMsgRef.current = {};
     setViewingSession(null);
     setMessages([]);
     setFinalAnswer("");
@@ -164,6 +568,8 @@ export default function MeetingPage() {
 
   const handleRun = async () => {
     if (!agenda.trim() || selectedIds.size === 0 || running) return;
+    currentAgendaRef.current = agenda.trim();
+    agentLastMsgRef.current = {};
     setViewingSession(null);
     setRunning(true);
     setMessages([]);
@@ -206,6 +612,7 @@ export default function MeetingPage() {
             } else if ("content" in payload && "agentId" in payload) {
               setMessages((prev) => [...prev, payload as ResearchMessage]);
               setActiveAgentId(payload.agentId);
+              agentLastMsgRef.current[payload.agentId] = payload.content;
             } else if ("content" in payload && !("agentId" in payload)) {
               setFinalAnswer(payload.content);
               setActiveAgentId(null);
@@ -287,8 +694,17 @@ export default function MeetingPage() {
         {/* New meeting button */}
         <div className="px-3 py-2 border-b" style={{ borderColor: "var(--border)" }}>
           <button
-            onClick={() => { closeHistory(); setMessages([]); setFinalAnswer(""); setStatus(""); setAgentTokens({}); }}
-            className="w-full py-2 text-xs font-medium border transition-colors"
+            onClick={() => {
+              closeHistory();
+              setMessages([]);
+              setFinalAnswer("");
+              setStatus("");
+              setAgentTokens({});
+              agentLastMsgRef.current = {};
+              currentAgendaRef.current = "";
+              setAgenda("");
+            }}
+            className="w-full py-2 text-xs font-medium border transition-colors font-mono"
             style={{
               borderColor: "var(--accent)",
               color: "var(--accent)",
@@ -358,70 +774,43 @@ export default function MeetingPage() {
       {/* ── Main meeting area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Attendees bar */}
-        <div
-          className="border-b px-5 py-3 flex-shrink-0"
-          style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-        >
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs opacity-40 font-medium flex-shrink-0">ผู้เข้าร่วม</span>
-            {agents.length === 0 ? (
-              <a href="/agents" className="text-xs opacity-60 px-2 py-1 border" style={{ borderColor: "var(--border)", color: "var(--accent)" }}>
-                + เพิ่ม agents ก่อน
-              </a>
-            ) : (
-              agents.map((a) => {
+        {/* ── Canvas: Pixel Art Meeting Room ── */}
+        <div className="flex-shrink-0 relative" style={{ height: `${CANVAS_HEIGHT}px` }}>
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full block"
+            style={{ imageRendering: "pixelated" }}
+          />
+          {/* Agent toggle pills (bottom overlay) */}
+          {!viewingSession && agents.length > 0 && (
+            <div
+              className="absolute bottom-2 left-0 right-0 flex gap-1.5 flex-wrap justify-center px-4"
+            >
+              {agents.map((a) => {
                 const isSelected = selectedIds.has(a.id);
-                const isActive = activeAgentId === a.id;
                 const tokens = agentTokens[a.id];
-                const isViewingAgent = viewingSession?.agentIds.includes(a.id);
-                const showAgent = viewingSession ? isViewingAgent : true;
-                if (!showAgent) return null;
+                const color = PROVIDER_COLORS[a.provider?.toLowerCase()] ?? "#6B7280";
                 return (
                   <button
                     key={a.id}
                     onClick={() => toggleAgent(a.id)}
+                    disabled={running}
                     title={`${a.name} — ${a.role}`}
-                    className="flex items-center gap-2 px-3 py-1.5 border text-xs transition-all"
+                    className="px-2 py-0.5 text-xs font-mono border transition-all"
                     style={{
-                      borderColor: isActive
-                        ? "var(--accent)"
-                        : isSelected
-                        ? "color-mix(in srgb, var(--accent) 50%, var(--border))"
-                        : "var(--border)",
-                      background: isActive
-                        ? "color-mix(in srgb, var(--accent) 18%, transparent)"
-                        : isSelected
-                        ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-                        : "transparent",
-                      opacity: (!viewingSession && !isSelected) ? 0.4 : 1,
-                      boxShadow: isActive ? "0 0 0 1px var(--accent)" : "none",
+                      borderColor: isSelected ? color : "rgba(80,90,150,0.35)",
+                      background: isSelected ? `${color}22` : "rgba(8,8,20,0.75)",
+                      color: isSelected ? color : "#555",
+                      backdropFilter: "blur(4px)",
                     }}
                   >
-                    <span className="text-base">{a.emoji}</span>
-                    <div>
-                      <div className="font-medium" style={{ color: isActive ? "var(--accent)" : "var(--text)" }}>
-                        {a.name}
-                      </div>
-                      <div className="opacity-50">{a.role}</div>
-                    </div>
-                    {tokens && (
-                      <div className="ml-1 opacity-60" style={{ color: "var(--accent)" }}>
-                        {tokens.totalTokens.toLocaleString()}tok
-                      </div>
-                    )}
-                    {isActive && (
-                      <span className="flex gap-0.5 items-center ml-1">
-                        <span className="w-1 h-1 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <span className="w-1 h-1 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <span className="w-1 h-1 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                      </span>
-                    )}
+                    {a.emoji} {a.name.length > 6 ? a.name.slice(0, 6) : a.name}
+                    {tokens ? <span style={{ opacity: 0.7 }}> {(tokens.totalTokens / 1000).toFixed(1)}k</span> : null}
                   </button>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         {/* Viewing history banner */}
