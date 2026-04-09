@@ -266,10 +266,20 @@ export async function POST(req: NextRequest) {
       }
 
       // Phase 2: Agents discuss each other's findings (cross-analysis)
+      // Assign alternating debate positions so agents are forced to argue different sides
       if (agentFindings.length > 1) {
         send("status", { message: "Agents are discussing findings..." });
 
-        for (const agent of selectedAgents) {
+        // Split agents into two camps: even index = "ฝ่ายสนับสนุน", odd index = "ฝ่ายคัดค้าน"
+        const debatePositions = selectedAgents.map((_, i) =>
+          i % 2 === 0
+            ? { label: "ฝ่ายสนับสนุน", stance: "คุณต้องยืนหยัดโต้แย้งว่า **ความเห็นของ agents อื่นผิดหรือไม่ครบ** อย่างน้อย 2 ประเด็น โดยใช้หลักฐานและเหตุผลที่แข็งแกร่งจากมุมมองของ role คุณ ห้ามเห็นด้วยกับใครโดยไม่ท้าทายก่อน" }
+            : { label: "ฝ่ายคัดค้าน", stance: "คุณต้องหาจุดอ่อนและโจมตีความเห็นของ agents อื่นอย่างน้อย 2 ประเด็น ชี้ให้เห็นว่าพวกเขามองข้ามอะไร หรือสรุปผิดตรงไหน แล้วเสนอมุมมองที่แตกต่างออกไปจาก role ของคุณ" }
+        );
+
+        for (let i = 0; i < selectedAgents.length; i++) {
+          const agent = selectedAgents[i];
+          const position = debatePositions[i];
           const apiKey = getAgentApiKey(agent.id);
           if (!apiKey) continue;
 
@@ -283,10 +293,13 @@ export async function POST(req: NextRequest) {
 
           try {
             const result = await callLLM(agent.provider, agent.model, apiKey, agent.baseUrl, [
-              { role: "system", content: agent.soul },
+              {
+                role: "system",
+                content: `${agent.soul}\n\n**บทบาทในการดีเบตครั้งนี้: ${position.label}**\n${position.stance}`,
+              },
               {
                 role: "user",
-                content: `คำถาม: ${question}\n\nความเห็นของคุณก่อนหน้า:\n${myFinding.content}\n\nความเห็นของ agents อื่น:\n${otherFindings}\n\n**กฎการถกเถียง (บังคับ):**\n1. ห้ามแค่เห็นด้วยหรือสรุปซ้ำ — ต้องหาจุดที่คุณ **ไม่เห็นด้วย** หรือ **เห็นว่าผิด/ไม่ครบ** ในความเห็นของ agents อื่น อย่างน้อย 1 ประเด็น\n2. โต้แย้งด้วยเหตุผลที่แข็งแกร่ง ชัดเจน และยืนหยัดในจุดยืนของคุณ\n3. หากคุณเห็นด้วยบางส่วน ให้ระบุว่าเห็นด้วยเฉพาะตรงไหน และไม่เห็นด้วยตรงไหน พร้อมอธิบายว่าทำไม\n4. ตอบในบทบาท ${agent.role} ของคุณ อย่าเปลี่ยนจุดยืนเพียงเพราะคนอื่นพูดมาก่อน`,
+                content: `คำถาม: ${question}\n\nความเห็นของคุณ (Phase 1):\n${myFinding.content}\n\n---\nความเห็นของ agents อื่นที่คุณต้องโต้แย้ง:\n${otherFindings}\n\n---\n**คำสั่ง:** ${position.stance}\n\nเริ่มต้นด้วยการระบุชัดเจนว่าคุณ **ไม่เห็นด้วย** กับใครในประเด็นใด แล้วอธิบายว่าทำไมพวกเขาถึงผิดหรือมองไม่ครบ ใช้ภาษาตรงไปตรงมา ไม่ต้องสุภาพเกินไป`,
               },
             ]);
 
