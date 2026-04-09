@@ -10,7 +10,7 @@ const BUGS_ENABLED_KEY = "pixel-office-bugs-enabled";
 const BUGS_COUNT_KEY = "pixel-office-bugs-count";
 const BUGS_MAX = 400;
 
-type NavIconName = "agents" | "pixelOffice" | "models" | "sessions" | "stats" | "alerts" | "skills" | "teamAgents" | "research" | "teams";
+type NavIconName = "agents" | "pixelOffice" | "models" | "sessions" | "stats" | "alerts" | "skills" | "teamAgents" | "research" | "teams" | "meetingRoom";
 type PixelTone = "base" | "shade" | "light";
 type PixelRect = { x: number; y: number; w?: number; h?: number; tone?: PixelTone; opacity?: number };
 type PixelPalette = { base: string; shade: string; light: string };
@@ -224,6 +224,26 @@ function NavPixelIcon({ name, active }: { name: NavIconName; active: boolean }) 
           ]}
         />
       );
+    case "meetingRoom":
+      return (
+        <PixelSvg
+          className={baseClass}
+          palette={palette}
+          pixels={[
+            // table
+            { x: 3, y: 5, w: 10, h: 6, tone: "shade" },
+            { x: 4, y: 6, w: 8, h: 4, tone: "base" },
+            // chairs top
+            { x: 2, y: 2, w: 2, h: 2, tone: "light" },
+            { x: 6, y: 2, w: 2, h: 2, tone: "light" },
+            { x: 10, y: 2, w: 2, h: 2, tone: "light" },
+            // chairs bottom
+            { x: 2, y: 12, w: 2, h: 2, tone: "light" },
+            { x: 6, y: 12, w: 2, h: 2, tone: "light" },
+            { x: 10, y: 12, w: 2, h: 2, tone: "light" },
+          ]}
+        />
+      );
   }
 }
 
@@ -254,6 +274,7 @@ const NAV_ITEMS: { group: string; items: { href: string; icon: NavIconName; labe
       { href: "/agents", icon: "teamAgents", labelKey: "nav.teamAgents" },
       { href: "/teams", icon: "teams", labelKey: "nav.teams" },
       { href: "/research", icon: "research", labelKey: "nav.research" },
+      { href: "/pixel-office-research", icon: "meetingRoom", labelKey: "nav.meetingRoom" },
     ],
   },
   {
