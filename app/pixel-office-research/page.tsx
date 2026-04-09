@@ -487,11 +487,11 @@ export default function PixelOfficeResearchPage() {
         </div>
       </div>
 
-      {/* ── Main area ── */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ── Main area: top canvas / bottom messages ── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Canvas — fixed width, left side */}
-        <div ref={containerRef} className="flex-none w-72 relative overflow-hidden bg-gray-950 border-r border-white/10">
+        {/* Canvas — top, fixed height */}
+        <div ref={containerRef} className="flex-none h-[42%] relative overflow-hidden bg-gray-950 border-b border-white/10">
           {!officeReady && (
             <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">
               Loading...
@@ -521,9 +521,9 @@ export default function PixelOfficeResearchPage() {
             ))}
           </div>
 
-          {/* Phase indicator */}
+          {/* Phase indicator — bottom of canvas */}
           {phase !== 'idle' && (
-            <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center gap-1" style={{ zIndex: 20 }}>
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center" style={{ zIndex: 20 }}>
               <div className={`px-3 py-1 rounded-full text-[10px] font-medium border ${phaseColor[phase]}`}>
                 {phaseLabel[phase]}
               </div>
@@ -531,7 +531,7 @@ export default function PixelOfficeResearchPage() {
           )}
         </div>
 
-        {/* Right panel: messages + final answer — takes remaining space */}
+        {/* Messages — bottom, scrollable */}
         <div className="flex-1 flex flex-col overflow-hidden bg-gray-900">
           {messages.length === 0 && !finalAnswer ? (
             <div className="flex-1 flex items-center justify-center text-white/20 text-sm">
@@ -562,7 +562,7 @@ export default function PixelOfficeResearchPage() {
               {finalAnswer && (
                 <div className="flex-none border-t border-white/10 p-4 bg-gray-950/60">
                   <div className="text-xs font-semibold text-purple-300 mb-2">✅ Final Answer</div>
-                  <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto">{finalAnswer}</div>
+                  <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto">{finalAnswer}</div>
                 </div>
               )}
             </>
