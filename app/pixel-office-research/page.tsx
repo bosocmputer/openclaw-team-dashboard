@@ -488,87 +488,86 @@ export default function PixelOfficeResearchPage() {
       </div>
 
       {/* ── Main area ── */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden">
 
-        {/* Canvas */}
-        <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-950">
+        {/* Canvas — fixed width, left side */}
+        <div ref={containerRef} className="flex-none w-72 relative overflow-hidden bg-gray-950 border-r border-white/10">
           {!officeReady && (
             <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">
-              Loading meeting room...
+              Loading...
             </div>
           )}
           <canvas ref={canvasRef} className="absolute inset-0" />
 
           {/* Floating code snippets */}
-          {(floatingCodeRef.current.length > 0 || floatingCommentsRef.current.length > 0) && (
-            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }}
-              key={floatingTick}
-            >
-              {floatingCodeRef.current.map(item => (
-                <div
-                  key={item.key}
-                  className="absolute text-[10px] font-mono text-emerald-400 whitespace-nowrap select-none"
-                  style={{ left: item.x, top: item.y, opacity: item.opacity, transform: 'translateX(-50%)' }}
-                >
-                  {item.text}
-                </div>
-              ))}
-              {floatingCommentsRef.current.map(item => (
-                <div
-                  key={item.key}
-                  className="absolute text-[11px] font-medium text-white whitespace-nowrap select-none bg-gray-900/80 px-2 py-0.5 rounded-full border border-white/10"
-                  style={{ left: item.x, top: item.y, opacity: item.opacity, transform: 'translateX(-50%)' }}
-                >
-                  {item.text}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 10 }} key={floatingTick}>
+            {floatingCodeRef.current.map(item => (
+              <div
+                key={item.key}
+                className="absolute text-[10px] font-mono text-emerald-400 whitespace-nowrap select-none"
+                style={{ left: item.x, top: item.y, opacity: item.opacity, transform: 'translateX(-50%)' }}
+              >
+                {item.text}
+              </div>
+            ))}
+            {floatingCommentsRef.current.map(item => (
+              <div
+                key={item.key}
+                className="absolute text-[11px] font-medium text-white whitespace-nowrap select-none bg-gray-900/80 px-2 py-0.5 rounded-full border border-white/10"
+                style={{ left: item.x, top: item.y, opacity: item.opacity, transform: 'translateX(-50%)' }}
+              >
+                {item.text}
+              </div>
+            ))}
+          </div>
 
           {/* Phase indicator */}
           {phase !== 'idle' && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1" style={{ zIndex: 20 }}>
-              <div className={`px-3 py-1 rounded-full text-xs font-medium border ${phaseColor[phase]}`}>
+            <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center gap-1" style={{ zIndex: 20 }}>
+              <div className={`px-3 py-1 rounded-full text-[10px] font-medium border ${phaseColor[phase]}`}>
                 {phaseLabel[phase]}
               </div>
-              {statusText && phase !== 'done' && (
-                <div className="text-xs text-white/40">{statusText}</div>
-              )}
             </div>
           )}
         </div>
 
-        {/* Right panel: messages + final answer */}
-        {(messages.length > 0 || finalAnswer) && (
-          <div className="flex-none w-80 bg-gray-900 border-l border-white/10 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
-              {messages.map(msg => (
-                <div key={msg.id} className="text-xs">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span>{msg.agentEmoji}</span>
-                    <span className="font-medium text-white/80">{msg.agentName}</span>
-                    <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
-                      msg.role === 'thinking' ? 'bg-blue-500/20 text-blue-300' :
-                      msg.role === 'finding' ? 'bg-emerald-500/20 text-emerald-300' :
-                      msg.role === 'chat' ? 'bg-orange-500/20 text-orange-300' :
-                      msg.role === 'synthesis' ? 'bg-purple-500/20 text-purple-300' :
-                      'bg-white/10 text-white/50'
-                    }`}>{msg.role}</span>
-                  </div>
-                  <div className="text-white/60 leading-relaxed line-clamp-4">{msg.content}</div>
-                </div>
-              ))}
+        {/* Right panel: messages + final answer — takes remaining space */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-gray-900">
+          {messages.length === 0 && !finalAnswer ? (
+            <div className="flex-1 flex items-center justify-center text-white/20 text-sm">
+              {phase === 'idle' ? 'Ask a question to start the research...' : 'Starting...'}
             </div>
-
-            {/* Final answer */}
-            {finalAnswer && (
-              <div className="flex-none border-t border-white/10 p-3 bg-gray-950/50">
-                <div className="text-xs font-semibold text-purple-300 mb-2">✅ Final Answer</div>
-                <div className="text-xs text-white/70 leading-relaxed max-h-48 overflow-y-auto">{finalAnswer}</div>
+          ) : (
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className={`text-sm ${msg.role === 'thinking' ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-base">{msg.agentEmoji}</span>
+                      <span className="font-semibold text-white/90">{msg.agentName}</span>
+                      <span className={`ml-auto px-2 py-0.5 rounded text-[10px] font-medium ${
+                        msg.role === 'thinking' ? 'bg-blue-500/20 text-blue-300' :
+                        msg.role === 'finding' ? 'bg-emerald-500/20 text-emerald-300' :
+                        msg.role === 'chat' ? 'bg-orange-500/20 text-orange-300' :
+                        msg.role === 'synthesis' ? 'bg-purple-500/20 text-purple-300' :
+                        'bg-white/10 text-white/50'
+                      }`}>{msg.role}</span>
+                    </div>
+                    <div className="text-white/75 leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
-        )}
+
+              {/* Final answer */}
+              {finalAnswer && (
+                <div className="flex-none border-t border-white/10 p-4 bg-gray-950/60">
+                  <div className="text-xs font-semibold text-purple-300 mb-2">✅ Final Answer</div>
+                  <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto">{finalAnswer}</div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Error */}

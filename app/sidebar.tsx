@@ -458,7 +458,7 @@ export function Sidebar() {
   const mobileLogoTransform = `translate(${logoCarry.dx}px, ${logoCarry.dy}px) rotate(${logoCarry.angle}rad)`;
   const logoCursor = !bugsEnabled ? (isLogoDragging ? "grabbing" : "grab") : "default";
   const mobileCurrent = NAV_ITEMS.flatMap((g) => g.items).find((item) =>
-    item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
+    item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/")
   );
 
   useEffect(() => {
@@ -595,7 +595,7 @@ export function Sidebar() {
                       </div>
                       <div className="space-y-1">
                         {group.items.map((item) => {
-                          const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                          const active = item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/");
                           return (
                             <Link
                               key={item.href}
@@ -762,7 +762,7 @@ export function Sidebar() {
                 )}
                 <div className="space-y-0.5">
                   {group.items.map((item) => {
-                    const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+                    const active = item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(item.href + "/");
                     return (
                       <Link
                         key={item.href}
