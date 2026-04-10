@@ -70,6 +70,8 @@ interface AgentPublic {
   role: string
   active: boolean
   hasApiKey: boolean
+  useWebSearch?: boolean
+  seniority?: number
 }
 
 interface ResearchMessage {
@@ -94,7 +96,10 @@ interface ConversationRound {
   messages: ResearchMessage[]
   finalAnswer: string
   suggestions: string[]
+  chairmanId?: string
 }
+
+type HistoryMode = 'full' | 'last3' | 'summary' | 'none'
 
 interface ConversationTurn {
   question: string
@@ -139,6 +144,9 @@ export default function PixelOfficeResearchPage() {
   const [phase, setPhase] = useState<ResearchPhase>('idle')
   const [tokenMap, setTokenMap] = useState<Record<string, AgentTokens>>({})
   const [error, setError] = useState('')
+  const [historyMode, setHistoryMode] = useState<HistoryMode>('last3')
+  const [chairmanId, setChairmanId] = useState<string | null>(null)
+  const [searchingAgents, setSearchingAgents] = useState<Set<string>>(new Set())
 
   // Conversation state
   const [rounds, setRounds] = useState<ConversationRound[]>([])
@@ -159,10 +167,12 @@ export default function PixelOfficeResearchPage() {
   const currentFinalAnswerRef = useRef('')
   const currentMessagesRef = useRef<ResearchMessage[]>([])
   const currentSuggestionsRef = useRef<string[]>([])
+  const chairmanIdRef = useRef<string | null>(null)
 
   useEffect(() => { currentFinalAnswerRef.current = currentFinalAnswer }, [currentFinalAnswer])
   useEffect(() => { currentMessagesRef.current = currentMessages }, [currentMessages])
   useEffect(() => { currentSuggestionsRef.current = currentSuggestions }, [currentSuggestions])
+  useEffect(() => { chairmanIdRef.current = chairmanId }, [chairmanId])
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -338,8 +348,10 @@ export default function PixelOfficeResearchPage() {
     setCurrentMessages([])
     setCurrentFinalAnswer('')
     setCurrentSuggestions([])
+    setChairmanId(null)
+    setSearchingAgents(new Set())
     setPhase('phase1')
-    setStatusText('Phase 1: Independent Research...')
+    setStatusText('🏛️ เปิดการประชุม...')
     if (!overrideQuestion) setQuestion('')
 
     const office = officeRef.current
@@ -353,6 +365,7 @@ export default function PixelOfficeResearchPage() {
           agentIds: selectedAgentIds,
           dataSource: 'none',
           conversationHistory: buildHistory(),
+          historyMode,
         }),
       })
 
@@ -379,23 +392,34 @@ export default function PixelOfficeResearchPage() {
           if (event === 'status') {
             const msg = data.message as string
             setStatusText(msg)
-            if (msg.includes('discussing')) setPhase('phase2')
-            if (msg.includes('Synthesizing')) setPhase('phase3')
+            if (msg.includes('Phase 2') || msg.includes('อภิปราย')) setPhase('phase2')
+            if (msg.includes('Phase 3') || msg.includes('ประธานสรุป')) setPhase('phase3')
+          }
+
+          if (event === 'chairman') {
+            setChairmanId(data.agentId as string)
+            chairmanIdRef.current = data.agentId as string
+          }
+
+          if (event === 'agent_searching') {
+            setSearchingAgents(prev => new Set([...prev, data.agentId as string]))
           }
 
           if (event === 'agent_start') {
             const charId = agentIdMapRef.current.get(data.agentId as string)
             if (charId !== undefined && office) office.setAgentActive(charId, true)
+            setSearchingAgents(prev => { const n = new Set(prev); n.delete(data.agentId as string); return n })
           }
 
           if (event === 'message') {
             const msg = data as unknown as ResearchMessage
+            setSearchingAgents(prev => { const n = new Set(prev); n.delete(msg.agentId); return n })
             setCurrentMessages(prev => [...prev, msg])
             const charId = agentIdMapRef.current.get(msg.agentId)
             if (charId !== undefined && office) {
               if (msg.role === 'thinking') {
                 office.pushCodeSnippet(charId, `💭 ${msg.content.slice(0, 30)}...`)
-              } else if (msg.role === 'finding' || msg.role === 'analysis') {
+              } else if (msg.role === 'finding') {
                 office.setAgentActive(charId, false)
                 office.pushSpeechBubble(charId, msg.content.slice(0, 60).replace(/\n/g, ' '))
               } else if (msg.role === 'chat') {
@@ -405,7 +429,7 @@ export default function PixelOfficeResearchPage() {
                 }
               } else if (msg.role === 'synthesis') {
                 office.setAgentActive(charId, true)
-                office.pushSpeechBubble(charId, '✅ ' + msg.content.slice(0, 50).replace(/\n/g, ' '))
+                office.pushSpeechBubble(charId, '🏛️ ' + msg.content.slice(0, 50).replace(/\n/g, ' '))
               }
             }
           }
@@ -425,7 +449,8 @@ export default function PixelOfficeResearchPage() {
 
           if (event === 'done') {
             setPhase('done')
-            setStatusText('Research complete!')
+            setStatusText('✅ ประชุมเสร็จสิ้น')
+            setSearchingAgents(new Set())
             if (office) {
               for (const [, charId] of agentIdMapRef.current) office.setAgentActive(charId, false)
             }
@@ -438,6 +463,7 @@ export default function PixelOfficeResearchPage() {
       return
     }
 
+    setSearchingAgents(new Set())
     // Commit round
     setRounds(prev => [
       ...prev,
@@ -446,6 +472,7 @@ export default function PixelOfficeResearchPage() {
         messages: currentMessagesRef.current,
         finalAnswer: currentFinalAnswerRef.current,
         suggestions: currentSuggestionsRef.current,
+        chairmanId: chairmanIdRef.current ?? undefined,
       },
     ])
     setCurrentMessages([])
@@ -478,8 +505,8 @@ export default function PixelOfficeResearchPage() {
   }
 
   const phaseLabel: Record<ResearchPhase, string> = {
-    idle: '', phase1: 'Phase 1 — Independent Research',
-    phase2: 'Phase 2 — Debate', phase3: 'Phase 3 — Synthesis', done: 'Complete',
+    idle: '', phase1: '📋 Phase 1 — นำเสนอมุมมอง',
+    phase2: '💬 Phase 2 — อภิปราย', phase3: '🏛️ Phase 3 — ประธานสรุปมติ', done: '✅ ประชุมเสร็จสิ้น',
   }
   const phaseColor: Record<ResearchPhase, string> = {
     idle: '', phase1: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
@@ -496,16 +523,29 @@ export default function PixelOfficeResearchPage() {
       {/* ── Top bar ── */}
       <div className="flex-none bg-gray-900 border-b border-white/10 p-3">
         <div className="flex items-center gap-2 max-w-5xl mx-auto">
-          <span className="text-lg">🏢</span>
-          <span className="font-semibold text-sm text-white/70">Meeting Room Research</span>
+          <span className="text-lg">🏛️</span>
+          <span className="font-semibold text-sm text-white/70">Meeting Room</span>
           {rounds.length > 0 && (
-            <span className="text-xs text-white/40 font-mono">{rounds.length} รอบ</span>
+            <span className="text-xs text-white/40 font-mono">{rounds.length} วาระ</span>
           )}
-          <div className="flex-1 flex items-center gap-2 ml-2">
+          {/* historyMode */}
+          <select
+            value={historyMode}
+            onChange={e => setHistoryMode(e.target.value as HistoryMode)}
+            aria-label="Context Memory Mode"
+            title="Context Memory Mode"
+            className="bg-gray-800 border border-white/10 rounded px-2 py-1 text-xs text-white/60 focus:outline-none"
+          >
+            <option value="full">Full memory</option>
+            <option value="last3">Last 3 วาระ</option>
+            <option value="summary">Summary</option>
+            <option value="none">No memory</option>
+          </select>
+          <div className="flex-1 flex items-center gap-2 ml-1">
             <textarea
               ref={textareaRef}
               className="flex-1 bg-gray-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 resize-none"
-              placeholder={rounds.length > 0 ? 'ถามต่อเลย... agents จำ context ทั้งหมด (Enter)' : 'Ask your question... (Enter to send)'}
+              placeholder={rounds.length > 0 ? 'พิมพ์วาระต่อไป... (Enter)' : 'พิมพ์วาระแรก... (Enter เพื่อเปิดประชุม)'}
               value={question}
               rows={1}
               onChange={e => setQuestion(e.target.value)}
@@ -522,14 +562,14 @@ export default function PixelOfficeResearchPage() {
               disabled={isRunning || !question.trim() || selectedAgentIds.length === 0}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-500 text-white whitespace-nowrap"
             >
-              {isRunning ? 'Running...' : '▶ Send'}
+              {isRunning ? 'กำลังประชุม...' : '🏛️ เปิดวาระ'}
             </button>
             {rounds.length > 0 && (
               <button
                 onClick={exportMarkdown}
                 className="px-3 py-2 rounded-lg text-xs text-white/50 border border-white/10 hover:border-white/30 transition-colors whitespace-nowrap"
               >
-                ⬇ Export
+                📄 Minutes
               </button>
             )}
             {rounds.length > 0 && (
@@ -537,7 +577,7 @@ export default function PixelOfficeResearchPage() {
                 onClick={() => { setRounds([]); setCurrentMessages([]); setCurrentFinalAnswer(''); setCurrentSuggestions([]); setPhase('idle'); localStorage.removeItem(STORAGE_KEY) }}
                 className="px-3 py-2 rounded-lg text-xs text-white/50 border border-white/10 hover:border-red-500/30 transition-colors whitespace-nowrap"
               >
-                🗑 New
+                🗑 ใหม่
               </button>
             )}
             <button
@@ -551,23 +591,31 @@ export default function PixelOfficeResearchPage() {
 
         {/* Agent selector */}
         <div className="flex gap-2 flex-wrap mt-2 max-w-5xl mx-auto">
-          {agents.map(agent => (
-            <button
-              key={agent.id}
-              onClick={() => toggleAgent(agent.id)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-all ${
-                selectedAgentIds.includes(agent.id)
-                  ? 'bg-white/10 border-white/30 text-white'
-                  : 'bg-transparent border-white/10 text-white/40'
-              }`}
-            >
-              <span>{agent.emoji}</span>
-              <span>{agent.name}</span>
-              {tokenMap[agent.id] && (
-                <span className="text-white/50 ml-1">{(tokenMap[agent.id].total / 1000).toFixed(1)}k</span>
-              )}
-            </button>
-          ))}
+          {agents.map(agent => {
+            const isChair = agent.id === chairmanId
+            const isSearching = searchingAgents.has(agent.id)
+            return (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => toggleAgent(agent.id)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition-all ${
+                  selectedAgentIds.includes(agent.id)
+                    ? 'bg-white/10 border-white/30 text-white'
+                    : 'bg-transparent border-white/10 text-white/40'
+                }`}
+              >
+                <span>{agent.emoji}</span>
+                <span>{agent.name}</span>
+                {isChair && <span className="text-[9px] px-1 rounded bg-blue-500 text-white">ประธาน</span>}
+                {agent.useWebSearch && <span title="Web Search" className="text-[9px]">🔍</span>}
+                {isSearching && <span className="text-[9px] text-blue-300 animate-pulse">ค้นหา...</span>}
+                {tokenMap[agent.id] && (
+                  <span className="text-white/50 ml-1">{(tokenMap[agent.id].total / 1000).toFixed(1)}k</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
