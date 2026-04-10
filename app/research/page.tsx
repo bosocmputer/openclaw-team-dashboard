@@ -107,11 +107,7 @@ const ROLE_COLOR: Record<string, string> = {
   chat: "border-gray-500/30 bg-gray-500/5",
 };
 
-const DATA_SOURCES = [
-  { id: "none", label: "None — ใช้ความรู้ของ model" },
-  { id: "mcp", label: "🔌 MCP Server" },
-  { id: "database", label: "🗄 MySQL / PostgreSQL" },
-];
+// Data Source = file attachments only (MCP moved to per-agent config)
 
 const HISTORY_MODES = [
   { id: "full", label: "Full — จำทุกรอบ" },
@@ -240,9 +236,6 @@ export default function ResearchPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [question, setQuestion] = useState("");
-  const [dataSource, setDataSource] = useState("none");
-  const [mcpEndpoint, setMcpEndpoint] = useState("");
-  const [dbConnectionString, setDbConnectionString] = useState("");
   const [historyMode, setHistoryMode] = useState<"full" | "last3" | "summary" | "none">("last3");
   const [running, setRunning] = useState(false);
   const [agentTokens, setAgentTokens] = useState<Record<string, AgentTokenState>>({});
@@ -439,9 +432,6 @@ export default function ResearchPage() {
         body: JSON.stringify({
           question: q,
           agentIds: Array.from(selectedIds),
-          dataSource,
-          mcpEndpoint: dataSource === "mcp" ? mcpEndpoint.trim() : undefined,
-          dbConnectionString: dataSource === "database" ? dbConnectionString.trim() : undefined,
           conversationHistory: buildHistory(),
           fileContexts: buildFileContexts(),
           historyMode,
@@ -669,20 +659,9 @@ export default function ResearchPage() {
               </select>
 
               <div className="text-xs font-mono mb-1 font-bold" style={{ color: "var(--text-muted)" }}>Data Source</div>
-              <select
-                value={dataSource}
-                onChange={(e) => setDataSource(e.target.value)}
-                className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono"
-                style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
-              >
-                {DATA_SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-              {dataSource === "mcp" && (
-                <input type="url" value={mcpEndpoint} onChange={(e) => setMcpEndpoint(e.target.value)} placeholder="http://localhost:3100/mcp" className="w-full mt-2 px-2 py-1.5 rounded-lg border text-xs font-mono outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-              )}
-              {dataSource === "database" && (
-                <input type="text" value={dbConnectionString} onChange={(e) => setDbConnectionString(e.target.value)} placeholder="mysql://user:pass@host/db" className="w-full mt-2 px-2 py-1.5 rounded-lg border text-xs font-mono outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
-              )}
+              <div className="text-xs font-mono px-2 py-1.5 rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--text-muted)" }}>
+                📎 เอกสารที่แนบ + 🔌 MCP ตาม Agent
+              </div>
             </div>
 
             {/* File Attachment Panel */}

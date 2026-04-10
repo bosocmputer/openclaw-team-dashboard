@@ -18,6 +18,8 @@ interface Agent {
   skills?: string[];
   useWebSearch: boolean;
   seniority?: number;
+  mcpEndpoint?: string;
+  mcpAccessMode?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -291,6 +293,8 @@ const EMPTY_FORM = {
   skills: [] as string[],
   useWebSearch: false,
   seniority: 50,
+  mcpEndpoint: "",
+  mcpAccessMode: "general",
   templateIndex: -1,
 };
 
@@ -305,6 +309,8 @@ export default function AgentsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [activeCategory, setActiveCategory] = useState("business");
+  const [mcpTesting, setMcpTesting] = useState(false);
+  const [mcpTestResult, setMcpTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const fetchAgents = useCallback(async () => {
     const res = await fetch("/api/team-agents");
@@ -361,8 +367,11 @@ export default function AgentsPage() {
       skills: agent.skills ?? [],
       useWebSearch: agent.useWebSearch ?? false,
       seniority: agent.seniority ?? 50,
+      mcpEndpoint: agent.mcpEndpoint ?? "",
+      mcpAccessMode: agent.mcpAccessMode ?? "general",
       templateIndex: -1,
     });
+    setMcpTestResult(null);
     setEditingId(agent.id);
     setError("");
     setShowForm(true);
@@ -388,6 +397,8 @@ export default function AgentsPage() {
         skills: form.skills,
         useWebSearch: form.useWebSearch,
         seniority: form.seniority,
+        mcpEndpoint: form.mcpEndpoint.trim() || undefined,
+        mcpAccessMode: form.mcpEndpoint.trim() ? form.mcpAccessMode : undefined,
       };
       if (editingId) {
         const res = await fetch(`/api/team-agents/${editingId}`, {
@@ -433,6 +444,29 @@ export default function AgentsPage() {
       ...f,
       skills: f.skills.includes(skillId) ? f.skills.filter((s) => s !== skillId) : [...f.skills, skillId],
     }));
+  };
+
+  const testMcp = async () => {
+    const endpoint = form.mcpEndpoint.trim();
+    if (!endpoint) return;
+    setMcpTesting(true);
+    setMcpTestResult(null);
+    try {
+      const res = await fetch(`/api/team-agents/mcp-test?endpoint=${encodeURIComponent(endpoint)}&mode=${form.mcpAccessMode}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        const toolCount = data.toolCount ?? 0;
+        setMcpTestResult({ ok: true, msg: `✓ เชื่อมต่อสำเร็จ — ${toolCount} tools พร้อมใช้งาน` });
+      } else {
+        setMcpTestResult({ ok: false, msg: `✗ ${data.error ?? "เชื่อมต่อไม่ได้"}` });
+      }
+    } catch {
+      setMcpTestResult({ ok: false, msg: "✗ Timeout หรือเชื่อมต่อไม่ได้" });
+    } finally {
+      setMcpTesting(false);
+    }
   };
 
   const categoriesWithTemplates = Object.entries(TEMPLATE_CATEGORIES).map(([key, cat]) => ({
@@ -787,6 +821,69 @@ export default function AgentsPage() {
                     <span className="text-xs font-mono w-8 text-center" style={{ color: "var(--accent)" }}>{form.seniority}</span>
                   </div>
                   <div className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>1 = ประธาน, 99 = พูดท้าย</div>
+                </div>
+              </div>
+
+              {/* MCP Server */}
+              <div className="p-4 rounded-xl border" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                <div className="text-xs font-mono font-bold mb-3" style={{ color: "var(--text)" }}>
+                  🔌 MCP Server Connection <span className="font-normal" style={{ color: "var(--text-muted)" }}>(ไม่บังคับ)</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-mono mb-1 block" style={{ color: "var(--text-muted)" }}>MCP Endpoint URL</label>
+                    <input
+                      value={form.mcpEndpoint}
+                      onChange={(e) => { setForm((f) => ({ ...f, mcpEndpoint: e.target.value })); setMcpTestResult(null); }}
+                      placeholder="http://192.168.1.100:3000"
+                      className="w-full px-3 py-2 rounded-lg border font-mono text-sm"
+                      style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
+                    />
+                  </div>
+                  {form.mcpEndpoint.trim() && (
+                    <div className="flex gap-3 items-start">
+                      <div className="flex-1">
+                        <label className="text-xs font-mono mb-1 block" style={{ color: "var(--text-muted)" }}>Access Mode</label>
+                        <select
+                          value={form.mcpAccessMode}
+                          onChange={(e) => setForm((f) => ({ ...f, mcpAccessMode: e.target.value }))}
+                          title="MCP Access Mode"
+                          aria-label="MCP Access Mode"
+                          className="w-full px-3 py-2 rounded-lg border font-mono text-sm"
+                          style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
+                        >
+                          <option value="general">general — ทั่วไป</option>
+                          <option value="admin">admin — ทุก tools</option>
+                          <option value="sales">sales — ขาย</option>
+                          <option value="purchase">purchase — จัดซื้อ</option>
+                          <option value="stock">stock — คลัง</option>
+                        </select>
+                      </div>
+                      <div className="mt-5">
+                        <button
+                          type="button"
+                          onClick={testMcp}
+                          disabled={mcpTesting}
+                          className="px-4 py-2 rounded-lg text-xs font-mono border transition-all disabled:opacity-50"
+                          style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                        >
+                          {mcpTesting ? "กำลังทดสอบ..." : "🔍 ทดสอบ"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {mcpTestResult && (
+                    <div
+                      className="text-xs font-mono px-3 py-2 rounded-lg border"
+                      style={{
+                        borderColor: mcpTestResult.ok ? "#22c55e40" : "#ef444440",
+                        background: mcpTestResult.ok ? "#22c55e10" : "#ef444410",
+                        color: mcpTestResult.ok ? "#4ade80" : "#f87171",
+                      }}
+                    >
+                      {mcpTestResult.msg}
+                    </div>
+                  )}
                 </div>
               </div>
 

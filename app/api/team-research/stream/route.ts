@@ -133,6 +133,55 @@ async function callLLM(
   throw new Error(`Unknown provider: ${provider}`);
 }
 
+// Fetch MCP tools and call relevant ones for context
+async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, question: string): Promise<string> {
+  try {
+    // Get available tools
+    const toolsRes = await fetch(`${mcpEndpoint}/tools`, {
+      headers: { "mcp-access-mode": mcpAccessMode },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!toolsRes.ok) return "";
+    const toolsData = await toolsRes.json();
+    const tools: { name: string; description?: string }[] = Array.isArray(toolsData) ? toolsData : (toolsData.tools ?? []);
+    if (tools.length === 0) return "";
+
+    // Pick up to 3 relevant tools (by name/description keyword match against question)
+    const q = question.toLowerCase();
+    const keywords = q.split(/\s+/).filter((w) => w.length > 3);
+    const scored = tools.map((t) => {
+      const text = `${t.name} ${t.description ?? ""}`.toLowerCase();
+      const score = keywords.filter((k) => text.includes(k)).length;
+      return { ...t, score };
+    }).sort((a, b) => b.score - a.score).slice(0, 3);
+
+    const results: string[] = [];
+    for (const tool of scored) {
+      try {
+        const callRes = await fetch(`${mcpEndpoint}/call`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "mcp-access-mode": mcpAccessMode,
+          },
+          body: JSON.stringify({ name: tool.name, arguments: { query: question } }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!callRes.ok) continue;
+        const callData = await callRes.json();
+        const text = typeof callData === "string" ? callData : JSON.stringify(callData);
+        if (text && text.length > 10) {
+          results.push(`[MCP:${tool.name}]\n${text.slice(0, 1500)}`);
+        }
+      } catch { /* skip failed tool */ }
+    }
+
+    return results.length > 0 ? `\n\n---\n🔌 ข้อมูลจาก MCP Server (${mcpEndpoint}):\n${results.join("\n\n")}\n---\n` : "";
+  } catch {
+    return "";
+  }
+}
+
 // Web search via Serper → SerpApi fallback
 async function webSearch(query: string, serperKey?: string, serpApiKey?: string): Promise<string> {
   if (serperKey) {
@@ -365,6 +414,12 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
+          // MCP context if agent has endpoint configured
+          let mcpContext = "";
+          if (agent.mcpEndpoint) {
+            mcpContext = await fetchMcpContext(agent.mcpEndpoint, agent.mcpAccessMode ?? "general", question);
+          }
+
           // Web search if agent has it enabled
           let searchContext = "";
           if (agent.useWebSearch && (serperKey || serpApiKeyVal)) {
@@ -396,7 +451,7 @@ export async function POST(req: NextRequest) {
           const result = await callLLM(agent.provider, agent.model, apiKey, agent.baseUrl, [
             {
               role: "system",
-              content: `${agent.soul}${dataSourceContext}${historyContext}${fileContext}${searchContext}`,
+              content: `${agent.soul}${dataSourceContext}${historyContext}${fileContext}${mcpContext}${searchContext}`,
             },
             {
               role: "user",

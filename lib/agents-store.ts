@@ -23,6 +23,8 @@ export interface Agent {
   active: boolean;
   useWebSearch: boolean; // whether agent can use web search
   seniority?: number; // 1=highest (Chairman), higher number=lower seniority
+  mcpEndpoint?: string; // MCP server endpoint URL
+  mcpAccessMode?: string; // admin|sales|purchase|stock|general
   createdAt: string;
   updatedAt: string;
 }
@@ -125,6 +127,8 @@ export function createAgent(data: {
   role: string;
   useWebSearch?: boolean;
   seniority?: number;
+  mcpEndpoint?: string;
+  mcpAccessMode?: string;
 }): AgentPublic {
   const agents = readAgents();
   const now = new Date().toISOString();
@@ -141,6 +145,8 @@ export function createAgent(data: {
     active: true,
     useWebSearch: data.useWebSearch ?? false,
     seniority: data.seniority,
+    mcpEndpoint: data.mcpEndpoint,
+    mcpAccessMode: data.mcpAccessMode,
     createdAt: now,
     updatedAt: now,
   };
@@ -164,6 +170,8 @@ export function updateAgent(
     active: boolean;
     useWebSearch: boolean;
     seniority: number;
+    mcpEndpoint: string;
+    mcpAccessMode: string;
   }>
 ): AgentPublic | null {
   const agents = readAgents();
@@ -181,6 +189,8 @@ export function updateAgent(
   if (data.active !== undefined) agent.active = data.active;
   if (data.useWebSearch !== undefined) agent.useWebSearch = data.useWebSearch;
   if (data.seniority !== undefined) agent.seniority = data.seniority;
+  if (data.mcpEndpoint !== undefined) agent.mcpEndpoint = data.mcpEndpoint;
+  if (data.mcpAccessMode !== undefined) agent.mcpAccessMode = data.mcpAccessMode;
   agent.updatedAt = new Date().toISOString();
   agents[idx] = agent;
   writeAgents(agents);
