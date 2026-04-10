@@ -143,34 +143,69 @@ interface McpTool {
   };
 }
 
-// Build arguments for a tool by inspecting its inputSchema — inject question as the first string param
+// Infer arguments for a tool from its name + description when no inputSchema available
 function buildToolArguments(tool: McpTool, question: string): Record<string, unknown> {
+  const name = tool.name;
+
+  // Tools that need keyword/search param
+  if (["search_product", "search_customer", "search_supplier"].includes(name)) {
+    return { keyword: question };
+  }
+
+  // Sales analytics tools — use date range (last 1 year) + optional question as keyword
+  const today = new Date();
+  const startOfYear = new Date(today.getFullYear(), 0, 1).toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  if (["get_sales_summary", "get_sales_item_detail", "get_sales_by_item",
+       "get_new_customer_trend", "get_dso_analysis", "get_sales_conversion_rate",
+       "get_customer_purchase_frequency", "get_salesman_crm_kpi",
+       "get_sales_by_area"].includes(name)) {
+    return { start_date: startOfYear, end_date: todayStr, response_format: "markdown" };
+  }
+
+  if (["get_sales_by_customer", "get_sales_by_salesman", "get_sales_by_branch",
+       "get_sales_by_dimension"].includes(name)) {
+    return { start_date: startOfYear, end_date: todayStr, response_format: "markdown" };
+  }
+
+  if (["get_customer_rfm", "get_customer_activity_status"].includes(name)) {
+    return { months: 12, response_format: "markdown" };
+  }
+
+  if (["get_customer_profitability", "get_item_top_buyers", "get_customer_top_items"].includes(name)) {
+    return { start_date: startOfYear, end_date: todayStr, limit: 10, response_format: "markdown" };
+  }
+
+  if (["get_customer_segment_summary"].includes(name)) {
+    return { period_months: 12, response_format: "markdown" };
+  }
+
+  if (["get_ar_aging", "get_customer_credit_status"].includes(name)) {
+    return { response_format: "markdown" };
+  }
+
+  // stock/inventory tools
+  if (["get_stock_balance", "get_product_price",
+       "get_account_incoming", "get_account_outstanding", "get_bookout_balance"].includes(name)) {
+    return { keyword: question };
+  }
+
+  // Use inputSchema if available
   const props = tool.inputSchema?.properties ?? {};
   const required = tool.inputSchema?.required ?? [];
-
-  // Priority: use required params first, then all string params
   const paramNames = required.length > 0 ? required : Object.keys(props);
   const args: Record<string, unknown> = {};
-
   for (const key of paramNames) {
     const prop = props[key];
     if (!prop) continue;
-    if (prop.type === "string") {
-      args[key] = question;
-      break; // inject question into first string param only
-    }
-    if (prop.type === "number" || prop.type === "integer") {
-      args[key] = 0;
-    }
+    if (prop.type === "string") { args[key] = question; break; }
   }
-
-  // Fallback — common param names
   if (Object.keys(args).length === 0) {
-    for (const k of ["keyword", "query", "search", "q", "text", "input"]) {
-      if (props[k]) { args[k] = question; break; }
+    for (const k of ["keyword", "query", "search", "q", "text"]) {
+      if (k in props) { args[k] = question; break; }
     }
   }
-
   return args;
 }
 
@@ -188,9 +223,11 @@ async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, quest
     const tools: McpTool[] = Array.isArray(toolsData) ? toolsData : (toolsData.tools ?? []);
     if (tools.length === 0) return "";
 
-    // Skip write/create tools — only use read/search tools
-    const READ_TOOL_PREFIXES = ["get_", "search_", "list_", "find_", "fetch_", "query_", "fallback_"];
+    // Skip write/create tools and fallback — only use read/search tools
+    const SKIP_TOOLS = ["create_sale_reserve", "fallback_response"];
+    const READ_TOOL_PREFIXES = ["get_", "search_", "list_", "find_", "fetch_", "query_"];
     const readTools = tools.filter((t) =>
+      !SKIP_TOOLS.includes(t.name) &&
       READ_TOOL_PREFIXES.some((p) => t.name.startsWith(p))
     );
     if (readTools.length === 0) return "";
