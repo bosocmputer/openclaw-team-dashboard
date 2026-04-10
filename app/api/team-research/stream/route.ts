@@ -397,6 +397,7 @@ export async function POST(req: NextRequest) {
     conversationHistory,
     fileContexts,
     historyMode = "full", // "full" | "summary" | "last3" | "none"
+    disableMcp = false,
   } = body as {
     question: string;
     agentIds: string[];
@@ -406,6 +407,7 @@ export async function POST(req: NextRequest) {
     conversationHistory?: ConversationTurn[];
     fileContexts?: { filename: string; meta: string; context: string; sheets?: string[] }[];
     historyMode?: "full" | "summary" | "last3" | "none";
+    disableMcp?: boolean;
   };
 
   if (!question || !agentIds?.length) {
@@ -534,9 +536,9 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // MCP context if agent has endpoint configured
+          // MCP context if agent has endpoint configured and not disabled by user
           let mcpContext = "";
-          if (agent.mcpEndpoint) {
+          if (!disableMcp && agent.mcpEndpoint) {
             mcpContext = await fetchMcpContext(agent.mcpEndpoint, agent.mcpAccessMode ?? "general", question);
           }
 

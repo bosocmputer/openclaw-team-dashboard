@@ -237,6 +237,8 @@ export default function ResearchPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [question, setQuestion] = useState("");
   const [historyMode, setHistoryMode] = useState<"full" | "last3" | "summary" | "none">("last3");
+  const [useFileContext, setUseFileContext] = useState(true);
+  const [useMcpContext, setUseMcpContext] = useState(true);
   const [running, setRunning] = useState(false);
   const [agentTokens, setAgentTokens] = useState<Record<string, AgentTokenState>>({});
   const [status, setStatus] = useState("");
@@ -451,8 +453,9 @@ export default function ResearchPage() {
           question: q,
           agentIds: Array.from(selectedIds),
           conversationHistory: buildHistory(),
-          fileContexts: buildFileContexts(),
+          fileContexts: useFileContext ? buildFileContexts() : [],
           historyMode,
+          disableMcp: !useMcpContext,
         }),
         signal: abortRef.current.signal,
       });
@@ -676,9 +679,22 @@ export default function ResearchPage() {
                 {HISTORY_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
 
-              <div className="text-xs font-mono mb-1 font-bold" style={{ color: "var(--text-muted)" }}>Data Source</div>
-              <div className="text-xs font-mono px-2 py-1.5 rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--text-muted)" }}>
-                📎 เอกสารที่แนบ + 🔌 MCP ตาม Agent
+              <div className="text-xs font-mono mb-1.5 font-bold" style={{ color: "var(--text-muted)" }}>Data Source</div>
+              <div className="flex flex-col gap-1.5">
+                {/* File toggle */}
+                <label className="flex items-center justify-between px-2 py-1.5 rounded-lg border cursor-pointer select-none" style={{ borderColor: useFileContext ? "var(--accent)" : "var(--border)", background: "var(--bg)" }}>
+                  <span className="text-xs font-mono" style={{ color: useFileContext ? "var(--text)" : "var(--text-muted)" }}>📎 เอกสารที่แนบ</span>
+                  <div onClick={() => setUseFileContext(v => !v)} className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0" style={{ background: useFileContext ? "var(--accent)" : "var(--border)" }}>
+                    <span className="absolute top-0.5 transition-all duration-200 w-3 h-3 rounded-full bg-white shadow" style={{ left: useFileContext ? "17px" : "2px" }} />
+                  </div>
+                </label>
+                {/* MCP toggle */}
+                <label className="flex items-center justify-between px-2 py-1.5 rounded-lg border cursor-pointer select-none" style={{ borderColor: useMcpContext ? "var(--accent)" : "var(--border)", background: "var(--bg)" }}>
+                  <span className="text-xs font-mono" style={{ color: useMcpContext ? "var(--text)" : "var(--text-muted)" }}>🔌 MCP ตาม Agent</span>
+                  <div onClick={() => setUseMcpContext(v => !v)} className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0" style={{ background: useMcpContext ? "var(--accent)" : "var(--border)" }}>
+                    <span className="absolute top-0.5 transition-all duration-200 w-3 h-3 rounded-full bg-white shadow" style={{ left: useMcpContext ? "17px" : "2px" }} />
+                  </div>
+                </label>
               </div>
             </div>
 
