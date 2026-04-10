@@ -235,9 +235,31 @@ async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, quest
     // Score tools by relevance: match question words against tool name + description
     const q = question.toLowerCase();
     const qWords = q.split(/[\s,]+/).filter((w) => w.length > 1);
+
+    // Keyword groups → preferred tool prefixes/names
+    const SALES_KEYWORDS = ["ยอดขาย", "sales", "ขาย", "revenue", "วิเคราะห์ยอด", "รายได้", "sale"];
+    const CUSTOMER_KEYWORDS = ["ลูกค้า", "customer", "rfm", "crm", "debt", "ar", "aging"];
+    const STOCK_KEYWORDS = ["สต็อก", "สินค้า", "stock", "inventory", "product", "item", "คงเหลือ"];
+
+    const hasSalesIntent = SALES_KEYWORDS.some((k) => q.includes(k));
+    const hasCustomerIntent = CUSTOMER_KEYWORDS.some((k) => q.includes(k));
+    const hasStockIntent = STOCK_KEYWORDS.some((k) => q.includes(k));
+
     const scored = readTools.map((t) => {
       const text = `${t.name.replace(/_/g, " ")} ${t.description ?? ""}`.toLowerCase();
-      const score = qWords.filter((w) => text.includes(w)).length;
+      let score = qWords.filter((w) => text.includes(w)).length;
+
+      // Boost analytical/summary tools when question has clear intent
+      if (hasSalesIntent && t.name.startsWith("get_sales")) score += 5;
+      if (hasCustomerIntent && (t.name.startsWith("get_customer") || t.name.startsWith("get_ar") || t.name.startsWith("get_dso"))) score += 5;
+      if (hasStockIntent && t.name.startsWith("get_stock")) score += 5;
+
+      // Penalize generic search tools when intent is clearly analytics
+      if ((hasSalesIntent || hasCustomerIntent || hasStockIntent) &&
+          ["search_product", "search_customer", "search_supplier"].includes(t.name)) {
+        score = Math.max(0, score - 3);
+      }
+
       return { tool: t, score };
     }).sort((a, b) => b.score - a.score);
 
