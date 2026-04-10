@@ -32,8 +32,10 @@ async function parseExcel(buffer: Buffer, filename: string): Promise<ParseResult
 }
 
 async function parsePDF(buffer: Buffer, filename: string): Promise<ParseResult> {
-  // Use dynamic import to avoid build-time issues
-  const pdfParse = (await import("pdf-parse")).default;
+  const mod = await import("pdf-parse");
+  // pdf-parse may export as default or as the function itself depending on bundler
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number }> = (mod as any).default ?? mod;
   const result = await pdfParse(buffer);
   return {
     text: result.text,
