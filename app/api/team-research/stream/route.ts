@@ -134,51 +134,110 @@ async function callLLM(
 }
 
 // Fetch MCP tools and call relevant ones for context
+interface McpTool {
+  name: string;
+  description?: string;
+  inputSchema?: {
+    properties?: Record<string, { type: string; description?: string }>;
+    required?: string[];
+  };
+}
+
+// Build arguments for a tool by inspecting its inputSchema — inject question as the first string param
+function buildToolArguments(tool: McpTool, question: string): Record<string, unknown> {
+  const props = tool.inputSchema?.properties ?? {};
+  const required = tool.inputSchema?.required ?? [];
+
+  // Priority: use required params first, then all string params
+  const paramNames = required.length > 0 ? required : Object.keys(props);
+  const args: Record<string, unknown> = {};
+
+  for (const key of paramNames) {
+    const prop = props[key];
+    if (!prop) continue;
+    if (prop.type === "string") {
+      args[key] = question;
+      break; // inject question into first string param only
+    }
+    if (prop.type === "number" || prop.type === "integer") {
+      args[key] = 0;
+    }
+  }
+
+  // Fallback — common param names
+  if (Object.keys(args).length === 0) {
+    for (const k of ["keyword", "query", "search", "q", "text", "input"]) {
+      if (props[k]) { args[k] = question; break; }
+    }
+  }
+
+  return args;
+}
+
 async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, question: string): Promise<string> {
   // Normalize endpoint — strip trailing slash and known MCP paths
   const base = mcpEndpoint.replace(/\/(health|tools|call|mcp|sse)\/?$/, "").replace(/\/$/, "");
   try {
-    // Get available tools
+    // Get available tools with full schema
     const toolsRes = await fetch(`${base}/tools`, {
       headers: { "mcp-access-mode": mcpAccessMode },
       signal: AbortSignal.timeout(6000),
     });
     if (!toolsRes.ok) return "";
     const toolsData = await toolsRes.json();
-    const tools: { name: string; description?: string }[] = Array.isArray(toolsData) ? toolsData : (toolsData.tools ?? []);
+    const tools: McpTool[] = Array.isArray(toolsData) ? toolsData : (toolsData.tools ?? []);
     if (tools.length === 0) return "";
 
-    // Pick up to 3 relevant tools (by name/description keyword match against question)
+    // Skip write/create tools — only use read/search tools
+    const READ_TOOL_PREFIXES = ["get_", "search_", "list_", "find_", "fetch_", "query_", "fallback_"];
+    const readTools = tools.filter((t) =>
+      READ_TOOL_PREFIXES.some((p) => t.name.startsWith(p))
+    );
+    if (readTools.length === 0) return "";
+
+    // Score tools by relevance: match question words against tool name + description
     const q = question.toLowerCase();
-    const keywords = q.split(/\s+/).filter((w) => w.length > 3);
-    const scored = tools.map((t) => {
-      const text = `${t.name} ${t.description ?? ""}`.toLowerCase();
-      const score = keywords.filter((k) => text.includes(k)).length;
-      return { ...t, score };
-    }).sort((a, b) => b.score - a.score).slice(0, 3);
+    const qWords = q.split(/[\s,]+/).filter((w) => w.length > 1);
+    const scored = readTools.map((t) => {
+      const text = `${t.name.replace(/_/g, " ")} ${t.description ?? ""}`.toLowerCase();
+      const score = qWords.filter((w) => text.includes(w)).length;
+      return { tool: t, score };
+    }).sort((a, b) => b.score - a.score);
+
+    // Take top 3 tools — always include at least 1 even if score=0
+    const topTools = scored.slice(0, 3).map((s) => s.tool);
 
     const results: string[] = [];
-    for (const tool of scored) {
+    for (const tool of topTools) {
       try {
+        const args = buildToolArguments(tool, question);
         const callRes = await fetch(`${base}/call`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
             "mcp-access-mode": mcpAccessMode,
           },
-          body: JSON.stringify({ name: tool.name, arguments: { query: question } }),
+          body: JSON.stringify({ name: tool.name, arguments: args }),
           signal: AbortSignal.timeout(8000),
         });
         if (!callRes.ok) continue;
         const callData = await callRes.json();
-        const text = typeof callData === "string" ? callData : JSON.stringify(callData);
-        if (text && text.length > 10) {
-          results.push(`[MCP:${tool.name}]\n${text.slice(0, 1500)}`);
+        // MCP /call returns { content: [{ type: "text", text: "..." }] }
+        let text = "";
+        if (callData?.content && Array.isArray(callData.content)) {
+          text = callData.content.map((c: { text?: string }) => c.text ?? "").join("\n");
+        } else {
+          text = typeof callData === "string" ? callData : JSON.stringify(callData);
+        }
+        if (text && text.trim().length > 10) {
+          results.push(`[${tool.name}]\n${text.slice(0, 2000)}`);
         }
       } catch { /* skip failed tool */ }
     }
 
-    return results.length > 0 ? `\n\n---\n🔌 ข้อมูลจาก MCP Server (${mcpEndpoint}):\n${results.join("\n\n")}\n---\n` : "";
+    return results.length > 0
+      ? `\n\n---\n🔌 ข้อมูลจาก MCP Server (${base}) — role: ${mcpAccessMode}:\n${results.join("\n\n")}\n---\n`
+      : "";
   } catch {
     return "";
   }
