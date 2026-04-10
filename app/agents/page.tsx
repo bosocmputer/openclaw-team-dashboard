@@ -16,6 +16,8 @@ interface Agent {
   hasApiKey: boolean;
   baseUrl?: string;
   skills?: string[];
+  useWebSearch: boolean;
+  seniority?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -287,6 +289,8 @@ const EMPTY_FORM = {
   soul: "",
   role: "",
   skills: [] as string[],
+  useWebSearch: false,
+  seniority: 50,
   templateIndex: -1,
 };
 
@@ -355,6 +359,8 @@ export default function AgentsPage() {
       soul: agent.soul,
       role: agent.role,
       skills: agent.skills ?? [],
+      useWebSearch: agent.useWebSearch ?? false,
+      seniority: agent.seniority ?? 50,
       templateIndex: -1,
     });
     setEditingId(agent.id);
@@ -380,6 +386,8 @@ export default function AgentsPage() {
         soul: form.soul,
         role: form.role,
         skills: form.skills,
+        useWebSearch: form.useWebSearch,
+        seniority: form.seniority,
       };
       if (editingId) {
         const res = await fetch(`/api/team-agents/${editingId}`, {
@@ -737,6 +745,48 @@ export default function AgentsPage() {
                       </span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Web Search + Seniority */}
+              <div className="flex gap-3">
+                <div className="flex-1 p-3 rounded-lg border flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                  <div>
+                    <div className="text-xs font-mono font-bold" style={{ color: "var(--text)" }}>🔍 Web Search</div>
+                    <div className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>ค้นหาข้อมูลจากอินเทอร์เน็ต</div>
+                  </div>
+                  <button
+                    type="button"
+                    title={form.useWebSearch ? "ปิด Web Search" : "เปิด Web Search"}
+                    aria-label={form.useWebSearch ? "ปิด Web Search" : "เปิด Web Search"}
+                    onClick={() => setForm((f) => ({ ...f, useWebSearch: !f.useWebSearch }))}
+                    className="w-10 h-5 rounded-full transition-all relative"
+                    style={{ background: form.useWebSearch ? "var(--accent)" : "var(--border)" }}
+                  >
+                    <span
+                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+                      style={{ left: form.useWebSearch ? "calc(100% - 18px)" : "2px" }}
+                    />
+                  </button>
+                </div>
+                <div className="flex-1 p-3 rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+                  <label className="text-xs font-mono font-bold block mb-1" style={{ color: "var(--text)" }}>
+                    🏛️ Seniority (ลำดับพูด)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={1}
+                      max={99}
+                      value={form.seniority}
+                      aria-label="ลำดับ Seniority"
+                      title="ลำดับ Seniority — 1 = ประธาน, 99 = พูดท้าย"
+                      onChange={(e) => setForm((f) => ({ ...f, seniority: Number(e.target.value) }))}
+                      className="flex-1"
+                    />
+                    <span className="text-xs font-mono w-8 text-center" style={{ color: "var(--accent)" }}>{form.seniority}</span>
+                  </div>
+                  <div className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>1 = ประธาน, 99 = พูดท้าย</div>
                 </div>
               </div>
 

@@ -21,6 +21,8 @@ export interface Agent {
   soul: string; // system prompt
   role: string; // e.g. Researcher, Analyst, Synthesizer
   active: boolean;
+  useWebSearch: boolean; // whether agent can use web search
+  seniority?: number; // 1=highest (Chairman), higher number=lower seniority
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +123,8 @@ export function createAgent(data: {
   model: string;
   soul: string;
   role: string;
+  useWebSearch?: boolean;
+  seniority?: number;
 }): AgentPublic {
   const agents = readAgents();
   const now = new Date().toISOString();
@@ -135,6 +139,8 @@ export function createAgent(data: {
     soul: data.soul,
     role: data.role,
     active: true,
+    useWebSearch: data.useWebSearch ?? false,
+    seniority: data.seniority,
     createdAt: now,
     updatedAt: now,
   };
@@ -156,6 +162,8 @@ export function updateAgent(
     soul: string;
     role: string;
     active: boolean;
+    useWebSearch: boolean;
+    seniority: number;
   }>
 ): AgentPublic | null {
   const agents = readAgents();
@@ -171,6 +179,8 @@ export function updateAgent(
   if (data.soul !== undefined) agent.soul = data.soul;
   if (data.role !== undefined) agent.role = data.role;
   if (data.active !== undefined) agent.active = data.active;
+  if (data.useWebSearch !== undefined) agent.useWebSearch = data.useWebSearch;
+  if (data.seniority !== undefined) agent.seniority = data.seniority;
   agent.updatedAt = new Date().toISOString();
   agents[idx] = agent;
   writeAgents(agents);
@@ -251,6 +261,57 @@ export function completeResearchSession(sessionId: string, finalAnswer: string, 
   sessions[idx].completedAt = new Date().toISOString();
   sessions[idx].finalAnswer = finalAnswer;
   writeResearch(sessions);
+}
+
+// --- Settings ---
+
+const SETTINGS_FILE = path.join(process.env.HOME || "", ".openclaw-team", "settings.json");
+
+export interface AppSettings {
+  serperApiKey?: string;
+  serpApiKey?: string;
+  updatedAt?: string;
+}
+
+function readSettings(): AppSettings {
+  ensureDir(SETTINGS_FILE);
+  if (!fs.existsSync(SETTINGS_FILE)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+export function getSettings(): AppSettings {
+  const s = readSettings();
+  // decrypt keys if present
+  return {
+    serperApiKey: s.serperApiKey ? decrypt(s.serperApiKey) : undefined,
+    serpApiKey: s.serpApiKey ? decrypt(s.serpApiKey) : undefined,
+    updatedAt: s.updatedAt,
+  };
+}
+
+export function saveSettings(data: { serperApiKey?: string; serpApiKey?: string }): AppSettings {
+  ensureDir(SETTINGS_FILE);
+  const now = new Date().toISOString();
+  const existing = readSettings();
+  const updated: AppSettings = {
+    serperApiKey: data.serperApiKey !== undefined
+      ? (data.serperApiKey ? encrypt(data.serperApiKey) : "")
+      : existing.serperApiKey,
+    serpApiKey: data.serpApiKey !== undefined
+      ? (data.serpApiKey ? encrypt(data.serpApiKey) : "")
+      : existing.serpApiKey,
+    updatedAt: now,
+  };
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(updated, null, 2));
+  return {
+    serperApiKey: data.serperApiKey !== undefined ? data.serperApiKey : (existing.serperApiKey ? decrypt(existing.serperApiKey) : undefined),
+    serpApiKey: data.serpApiKey !== undefined ? data.serpApiKey : (existing.serpApiKey ? decrypt(existing.serpApiKey) : undefined),
+    updatedAt: now,
+  };
 }
 
 // --- Teams ---

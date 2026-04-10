@@ -297,6 +297,7 @@ const NAV_ITEMS: { group: string; items: { href: string; icon: NavIconName; labe
     group: "nav.config",
     items: [
       { href: "/skills", icon: "skills", labelKey: "nav.skills" },
+      { href: "/settings", icon: "skills", labelKey: "nav.settings" },
     ],
   },
 ];
