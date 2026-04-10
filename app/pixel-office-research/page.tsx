@@ -101,7 +101,19 @@ interface ConversationTurn {
   answer: string
 }
 
+interface ServerSession {
+  id: string
+  question: string
+  status: string
+  startedAt: string
+  totalTokens: number
+  messages: ResearchMessage[]
+  finalAnswer?: string
+}
+
 type ResearchPhase = 'idle' | 'phase1' | 'phase2' | 'phase3' | 'done'
+
+const STORAGE_KEY = 'pixel_research_conversation_v1'
 
 // ─── Sprite assets promise (shared) ──────────────────────────────────────────
 let spritePromise: Promise<void> | null = null
@@ -135,6 +147,11 @@ export default function PixelOfficeResearchPage() {
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([])
   const [statusText, setStatusText] = useState('')
 
+  // Server history
+  const [serverSessions, setServerSessions] = useState<ServerSession[]>([])
+  const [viewingSession, setViewingSession] = useState<ServerSession | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
+
   const messagesBottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -147,6 +164,24 @@ export default function PixelOfficeResearchPage() {
   useEffect(() => { currentMessagesRef.current = currentMessages }, [currentMessages])
   useEffect(() => { currentSuggestionsRef.current = currentSuggestions }, [currentSuggestions])
 
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.rounds) setRounds(parsed.rounds)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  // Save to localStorage when rounds change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds }))
+    } catch { /* ignore */ }
+  }, [rounds])
+
   // Load agents
   useEffect(() => {
     fetch('/api/team-agents')
@@ -158,6 +193,17 @@ export default function PixelOfficeResearchPage() {
       })
       .catch(() => {})
   }, [])
+
+  // Fetch server history
+  const fetchServerHistory = useCallback(async () => {
+    try {
+      const res = await fetch('/api/team-research')
+      const data = await res.json()
+      setServerSessions((data.sessions ?? []).slice(0, 20))
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => { fetchServerHistory() }, [fetchServerHistory])
 
   // Init office engine
   useEffect(() => {
@@ -406,9 +452,10 @@ export default function PixelOfficeResearchPage() {
     setCurrentFinalAnswer('')
     setCurrentSuggestions([])
     setPhase('idle')
+    fetchServerHistory()
     setTimeout(() => textareaRef.current?.focus(), 100)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question, selectedAgentIds, phase, rounds])
+  }, [question, selectedAgentIds, phase, rounds, fetchServerHistory])
 
   const exportMarkdown = () => {
     const lines: string[] = ['# Meeting Room Research', `> Export: ${new Date().toLocaleString('th')}`, '']
@@ -487,12 +534,18 @@ export default function PixelOfficeResearchPage() {
             )}
             {rounds.length > 0 && (
               <button
-                onClick={() => { setRounds([]); setCurrentMessages([]); setCurrentFinalAnswer(''); setCurrentSuggestions([]); setPhase('idle') }}
+                onClick={() => { setRounds([]); setCurrentMessages([]); setCurrentFinalAnswer(''); setCurrentSuggestions([]); setPhase('idle'); localStorage.removeItem(STORAGE_KEY) }}
                 className="px-3 py-2 rounded-lg text-xs text-white/50 border border-white/10 hover:border-red-500/30 transition-colors whitespace-nowrap"
               >
                 🗑 New
               </button>
             )}
+            <button
+              onClick={() => setShowHistory(h => !h)}
+              className={`px-3 py-2 rounded-lg text-xs border transition-colors whitespace-nowrap ${showHistory ? 'border-blue-500/40 text-blue-300 bg-blue-500/10' : 'border-white/10 text-white/50 hover:border-white/30'}`}
+            >
+              📋 History ({serverSessions.length})
+            </button>
           </div>
         </div>
 
@@ -562,12 +615,80 @@ export default function PixelOfficeResearchPage() {
 
         {/* Messages — scrollable conversation */}
         <div className="flex-1 flex flex-col overflow-hidden bg-gray-900">
+          {/* History panel overlay */}
+          {showHistory && (
+            <div className="absolute inset-0 z-10 bg-gray-900/98 flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="text-sm font-semibold text-white/80">📋 Research History ({serverSessions.length})</div>
+                <button onClick={() => setShowHistory(false)} className="text-white/40 hover:text-white text-lg">✕</button>
+              </div>
+              {serverSessions.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-white/30 text-sm">ไม่มีประวัติ</div>
+              ) : (
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {serverSessions.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/team-research/${s.id}`)
+                          const data = await res.json()
+                          if (data.session) { setViewingSession(data.session); setShowHistory(false) }
+                        } catch { /* ignore */ }
+                      }}
+                      className={`w-full text-left p-3 rounded-xl border transition-all ${viewingSession?.id === s.id ? 'border-blue-500/40 bg-blue-500/10' : 'border-white/10 hover:border-white/20 bg-gray-800/50'}`}
+                    >
+                      <div className="text-xs text-white/80 line-clamp-2">{s.question}</div>
+                      <div className="text-[10px] text-white/40 mt-1">
+                        {s.status === 'completed' ? '✅' : s.status === 'error' ? '❌' : '⏳'}{' '}
+                        {new Date(s.startedAt).toLocaleString('th')}
+                        {s.totalTokens > 0 && ` · ${s.totalTokens.toLocaleString()} tokens`}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-4 space-y-6">
 
-            {rounds.length === 0 && currentMessages.length === 0 && phase === 'idle' && (
+            {/* Viewing server session */}
+            {viewingSession && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+                  <span>📋 ดูประวัติ: {viewingSession.question}</span>
+                  <button onClick={() => setViewingSession(null)} className="ml-auto text-white/40 hover:text-white">✕</button>
+                </div>
+                <div className="flex justify-end">
+                  <div className="max-w-xl px-4 py-2 rounded-2xl rounded-tr-sm bg-blue-600 text-white text-sm">{viewingSession.question}</div>
+                </div>
+                {viewingSession.messages.map(msg => (
+                  <div key={msg.id} className={`text-sm ${msg.role === 'thinking' ? 'opacity-40' : ''}`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-base">{msg.agentEmoji}</span>
+                      <span className="font-semibold text-white/90">{msg.agentName}</span>
+                      <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-medium bg-white/10 text-white/50">{msg.role}</span>
+                    </div>
+                    <div className="text-white/75 leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                  </div>
+                ))}
+                {viewingSession.finalAnswer && (
+                  <div className="border-t border-white/10 pt-3 bg-gray-950/40 rounded-xl p-4">
+                    <div className="text-xs font-semibold text-purple-300 mb-2">✅ Final Answer</div>
+                    <div className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{viewingSession.finalAnswer}</div>
+                    <button onClick={() => { setViewingSession(null); setQuestion(viewingSession.question) }} className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-blue-500/40 text-blue-300">
+                      🔄 ถามคำถามนี้อีกครั้ง
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!viewingSession && rounds.length === 0 && currentMessages.length === 0 && phase === 'idle' && (
               <div className="flex items-center justify-center h-full text-white/20 text-sm text-center">
                 Ask a question to start the research...<br />
-                <span className="text-xs mt-1 block opacity-60">ถามต่อเรื่อย ๆ ได้ agents จะจำ context ทุกรอบ</span>
+                <span className="text-xs mt-1 block opacity-60">ถามต่อเรื่อย ๆ ได้ agents จำ context ทุกรอบ · refresh ก็ไม่หาย</span>
               </div>
             )}
 

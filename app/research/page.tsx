@@ -43,6 +43,18 @@ interface ConversationTurn {
   answer: string;
 }
 
+interface ServerSession {
+  id: string;
+  question: string;
+  status: string;
+  startedAt: string;
+  totalTokens: number;
+  messages: ResearchMessage[];
+  finalAnswer?: string;
+}
+
+const STORAGE_KEY = "research_conversation_v1";
+
 const ROLE_LABEL: Record<string, string> = {
   thinking: "💭 กำลังคิด",
   finding: "🔍 พบข้อมูล",
@@ -76,15 +88,45 @@ export default function ResearchPage() {
   const [agentTokens, setAgentTokens] = useState<Record<string, AgentTokenState>>({});
   const [status, setStatus] = useState("");
 
-  // Conversation state
+  // Conversation state (persisted in localStorage)
   const [rounds, setRounds] = useState<ConversationRound[]>([]);
   const [currentMessages, setCurrentMessages] = useState<ResearchMessage[]>([]);
   const [currentFinalAnswer, setCurrentFinalAnswer] = useState("");
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
 
+  // Server history
+  const [serverSessions, setServerSessions] = useState<ServerSession[]>([]);
+  const [viewingSession, setViewingSession] = useState<ServerSession | null>(null);
+  const [historyTab, setHistoryTab] = useState<"current" | "history">("current");
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentFinalAnswerRef = useRef("");
+  const currentMessagesRef = useRef<ResearchMessage[]>([]);
+  const currentSuggestionsRef = useRef<string[]>([]);
+
+  useEffect(() => { currentFinalAnswerRef.current = currentFinalAnswer; }, [currentFinalAnswer]);
+  useEffect(() => { currentMessagesRef.current = currentMessages; }, [currentMessages]);
+  useEffect(() => { currentSuggestionsRef.current = currentSuggestions; }, [currentSuggestions]);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.rounds) setRounds(parsed.rounds);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Save to localStorage when rounds change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ rounds }));
+    } catch { /* ignore */ }
+  }, [rounds]);
 
   const fetchAgents = useCallback(async () => {
     const res = await fetch("/api/team-agents");
@@ -94,9 +136,18 @@ export default function ResearchPage() {
     setSelectedIds(new Set(activeAgents.map((a: Agent) => a.id)));
   }, []);
 
+  const fetchServerHistory = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team-research");
+      const data = await res.json();
+      setServerSessions((data.sessions ?? []).slice(0, 20));
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     fetchAgents();
-  }, [fetchAgents]);
+    fetchServerHistory();
+  }, [fetchAgents, fetchServerHistory]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -118,6 +169,8 @@ export default function ResearchPage() {
     const q = (overrideQuestion ?? question).trim();
     if (!q || selectedIds.size === 0 || running) return;
 
+    setViewingSession(null);
+    setHistoryTab("current");
     setRunning(true);
     setCurrentMessages([]);
     setCurrentFinalAnswer("");
@@ -127,7 +180,6 @@ export default function ResearchPage() {
     if (!overrideQuestion) setQuestion("");
 
     abortRef.current = new AbortController();
-
     const roundTokens: Record<string, AgentTokenState> = {};
 
     try {
@@ -169,19 +221,13 @@ export default function ResearchPage() {
             } else if ("content" in payload && !("agentId" in payload)) {
               setCurrentFinalAnswer(payload.content);
             } else if ("inputTokens" in payload) {
-              const t = {
-                inputTokens: payload.inputTokens,
-                outputTokens: payload.outputTokens,
-                totalTokens: payload.totalTokens,
-              };
+              const t = { inputTokens: payload.inputTokens, outputTokens: payload.outputTokens, totalTokens: payload.totalTokens };
               roundTokens[payload.agentId] = t;
               setAgentTokens((prev) => ({ ...prev, [payload.agentId]: t }));
             } else if ("suggestions" in payload) {
               setCurrentSuggestions(payload.suggestions);
             }
-          } catch {
-            // ignore
-          }
+          } catch { /* ignore */ }
         }
       }
     } catch (e: unknown) {
@@ -190,37 +236,23 @@ export default function ResearchPage() {
       }
     } finally {
       setRunning(false);
-      // Commit current round to history
-      setRounds((prev) => {
-        const lastFinalAnswer = currentFinalAnswerRef.current;
-        const lastMessages = currentMessagesRef.current;
-        const lastSuggestions = currentSuggestionsRef.current;
-        return [
-          ...prev,
-          {
-            question: q,
-            messages: lastMessages,
-            finalAnswer: lastFinalAnswer,
-            agentTokens: roundTokens,
-            suggestions: lastSuggestions,
-          },
-        ];
-      });
+      setRounds((prev) => [
+        ...prev,
+        {
+          question: q,
+          messages: currentMessagesRef.current,
+          finalAnswer: currentFinalAnswerRef.current,
+          agentTokens: roundTokens,
+          suggestions: currentSuggestionsRef.current,
+        },
+      ]);
       setCurrentMessages([]);
       setCurrentFinalAnswer("");
       setCurrentSuggestions([]);
+      fetchServerHistory();
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
   };
-
-  // Refs to capture latest state in finally block
-  const currentFinalAnswerRef = useRef("");
-  const currentMessagesRef = useRef<ResearchMessage[]>([]);
-  const currentSuggestionsRef = useRef<string[]>([]);
-
-  useEffect(() => { currentFinalAnswerRef.current = currentFinalAnswer; }, [currentFinalAnswer]);
-  useEffect(() => { currentMessagesRef.current = currentMessages; }, [currentMessages]);
-  useEffect(() => { currentSuggestionsRef.current = currentSuggestions; }, [currentSuggestions]);
 
   const handleStop = () => {
     abortRef.current?.abort();
@@ -228,105 +260,115 @@ export default function ResearchPage() {
     setStatus("หยุดการทำงาน");
   };
 
+  const loadServerSession = async (session: ServerSession) => {
+    try {
+      const res = await fetch(`/api/team-research/${session.id}`);
+      const data = await res.json();
+      if (data.session) {
+        setViewingSession(data.session);
+        setHistoryTab("history");
+      }
+    } catch { /* ignore */ }
+  };
+
+  const clearSession = () => {
+    setRounds([]);
+    setCurrentMessages([]);
+    setCurrentFinalAnswer("");
+    setCurrentSuggestions([]);
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
   const exportMarkdown = () => {
-    const lines: string[] = ["# Team Research Session", `> Export: ${new Date().toLocaleString("th")}`, ""];
-    rounds.forEach((r, i) => {
+    const src = viewingSession ? null : rounds;
+    if (viewingSession) {
+      const lines = [`# Research Session`, `> ${viewingSession.question}`, `> ${new Date(viewingSession.startedAt).toLocaleString("th")}`, ""];
+      viewingSession.messages.forEach((m) => {
+        if (m.role === "thinking") return;
+        lines.push(`### ${m.agentEmoji} ${m.agentName} (${m.role})`, m.content, "");
+      });
+      if (viewingSession.finalAnswer) lines.push("### ✅ สรุป", viewingSession.finalAnswer, "");
+      const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `research-${Date.now()}.md`; a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    if (!src || src.length === 0) return;
+    const lines = ["# Team Research Session", `> Export: ${new Date().toLocaleString("th")}`, ""];
+    src.forEach((r, i) => {
       lines.push(`## รอบที่ ${i + 1}: ${r.question}`, "");
       r.messages.forEach((m) => {
         if (m.role === "thinking") return;
         lines.push(`### ${m.agentEmoji} ${m.agentName} (${m.role})`, m.content, "");
       });
-      if (r.finalAnswer) {
-        lines.push("### ✅ สรุปคำตอบ", r.finalAnswer, "");
-      }
+      if (r.finalAnswer) lines.push("### ✅ สรุปคำตอบ", r.finalAnswer, "");
       lines.push("---", "");
     });
     const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `research-${Date.now()}.md`;
-    a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `research-${Date.now()}.md`; a.click();
     URL.revokeObjectURL(url);
   };
 
+  const displayRounds = rounds;
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--bg)" }}>
-      <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col p-6 gap-6">
+      <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col p-6 gap-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold font-mono" style={{ color: "var(--text)" }}>
-              🔬 Team Research
-            </h1>
+            <h1 className="text-2xl font-bold font-mono" style={{ color: "var(--text)" }}>🔬 Team Research</h1>
             <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
               ถามต่อเรื่อย ๆ ได้ — agents จำ context และถกเถียงกันทุกรอบ
             </p>
           </div>
-          {rounds.length > 0 && (
-            <button
-              onClick={exportMarkdown}
-              className="px-3 py-1.5 rounded-lg text-xs font-mono border transition-all"
-              style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-            >
-              ⬇ Export Markdown
-            </button>
-          )}
+          <div className="flex gap-2">
+            {(rounds.length > 0 || viewingSession) && (
+              <button onClick={exportMarkdown} className="px-3 py-1.5 rounded-lg text-xs font-mono border" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                ⬇ Export
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="flex gap-6 flex-1 min-h-0">
-          {/* Left panel */}
-          <div className="flex flex-col gap-4 w-72 flex-shrink-0">
+        <div className="flex gap-4 flex-1 min-h-0">
+
+          {/* ── Left sidebar ── */}
+          <div className="flex flex-col gap-3 w-64 flex-shrink-0">
             {/* Agent selector */}
-            <div
-              className="border rounded-xl p-4"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-            >
-              <div className="text-xs font-mono mb-3" style={{ color: "var(--text-muted)" }}>
-                เลือก Agents ({selectedIds.size}/{agents.length})
+            <div className="border rounded-xl p-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="text-xs font-mono mb-2 font-bold" style={{ color: "var(--text-muted)" }}>
+                Agents ({selectedIds.size}/{agents.length})
               </div>
               {agents.length === 0 ? (
-                <div className="text-xs font-mono text-center py-4" style={{ color: "var(--text-muted)" }}>
-                  ไม่มี agents — ไปที่ Team Agents ก่อน
-                </div>
+                <div className="text-xs font-mono text-center py-3" style={{ color: "var(--text-muted)" }}>ไม่มี agents</div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {agents.map((agent) => {
                     const tokens = agentTokens[agent.id];
                     return (
                       <button
                         key={agent.id}
                         onClick={() => toggleAgent(agent.id)}
-                        className="w-full text-left p-3 rounded-lg border transition-all"
+                        className="w-full text-left p-2 rounded-lg border transition-all"
                         style={{
                           borderColor: selectedIds.has(agent.id) ? "var(--accent)" : "var(--border)",
-                          background: selectedIds.has(agent.id)
-                            ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-                            : "transparent",
+                          background: selectedIds.has(agent.id) ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
                         }}
                       >
-                        <div className="flex items-center gap-2">
-                          <span>{agent.emoji}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">{agent.emoji}</span>
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-mono font-bold truncate" style={{ color: "var(--text)" }}>
-                              {agent.name}
-                            </div>
-                            <div className="text-xs font-mono truncate" style={{ color: "var(--text-muted)" }}>
-                              {agent.role} · {agent.model.split("-").slice(0, 2).join("-")}
-                            </div>
+                            <div className="text-xs font-mono font-bold truncate" style={{ color: "var(--text)" }}>{agent.name}</div>
+                            <div className="text-[10px] font-mono truncate" style={{ color: "var(--text-muted)" }}>{agent.role}</div>
                           </div>
-                          <div
-                            className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ background: selectedIds.has(agent.id) ? "var(--accent)" : "var(--border)" }}
-                          />
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: selectedIds.has(agent.id) ? "var(--accent)" : "var(--border)" }} />
                         </div>
                         {tokens && (
-                          <div className="mt-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                            <span style={{ color: "var(--accent)" }}>▲ {tokens.inputTokens.toLocaleString()}</span>
-                            {" / "}
-                            <span>▼ {tokens.outputTokens.toLocaleString()}</span>
-                            {" = "}
-                            <span className="font-bold">{tokens.totalTokens.toLocaleString()} tokens</span>
+                          <div className="mt-1 text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>
+                            {tokens.totalTokens.toLocaleString()} tokens
                           </div>
                         )}
                       </button>
@@ -337,99 +379,167 @@ export default function ResearchPage() {
             </div>
 
             {/* Data source */}
-            <div
-              className="border rounded-xl p-4"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-            >
-              <div className="text-xs font-mono mb-2" style={{ color: "var(--text-muted)" }}>
-                Data Source
-              </div>
+            <div className="border rounded-xl p-3" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              <div className="text-xs font-mono mb-1.5" style={{ color: "var(--text-muted)" }}>Data Source</div>
               <select
                 value={dataSource}
                 onChange={(e) => setDataSource(e.target.value)}
                 className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono"
                 style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
               >
-                {DATA_SOURCES.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
+                {DATA_SOURCES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
               {dataSource === "mcp" && (
-                <div className="mt-3 space-y-1.5">
-                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>MCP Endpoint URL</div>
-                  <input
-                    type="url"
-                    value={mcpEndpoint}
-                    onChange={(e) => setMcpEndpoint(e.target.value)}
-                    placeholder="http://localhost:3100/mcp"
-                    className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
+                <input type="url" value={mcpEndpoint} onChange={(e) => setMcpEndpoint(e.target.value)} placeholder="http://localhost:3100/mcp" className="w-full mt-2 px-2 py-1.5 rounded-lg border text-xs font-mono outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
               )}
               {dataSource === "database" && (
-                <div className="mt-3 space-y-1.5">
-                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Connection String</div>
-                  <input
-                    type="text"
-                    value={dbConnectionString}
-                    onChange={(e) => setDbConnectionString(e.target.value)}
-                    placeholder="mysql://user:pass@host:3306/db"
-                    className="w-full px-2 py-1.5 rounded-lg border text-xs font-mono outline-none"
-                    style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }}
-                  />
-                </div>
+                <input type="text" value={dbConnectionString} onChange={(e) => setDbConnectionString(e.target.value)} placeholder="mysql://user:pass@host/db" className="w-full mt-2 px-2 py-1.5 rounded-lg border text-xs font-mono outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
               )}
             </div>
 
-            {/* Session stats */}
-            {rounds.length > 0 && (
-              <div
-                className="border rounded-xl p-4"
-                style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-              >
-                <div className="text-xs font-mono mb-2" style={{ color: "var(--text-muted)" }}>
-                  Session
-                </div>
-                <div className="text-xs font-mono space-y-1" style={{ color: "var(--text)" }}>
-                  <div>{rounds.length} รอบที่ถามแล้ว</div>
-                  <button
-                    onClick={() => { setRounds([]); setCurrentMessages([]); setCurrentFinalAnswer(""); setCurrentSuggestions([]); }}
-                    className="mt-2 text-xs font-mono px-2 py-1 rounded border w-full"
-                    style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-                  >
-                    🗑 เริ่ม session ใหม่
-                  </button>
-                </div>
+            {/* History panel — tabs */}
+            <div className="border rounded-xl flex-1 flex flex-col overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
+              {/* Tab bar */}
+              <div className="flex border-b" style={{ borderColor: "var(--border)" }}>
+                <button
+                  onClick={() => { setHistoryTab("current"); setViewingSession(null); }}
+                  className="flex-1 py-2 text-xs font-mono transition-all"
+                  style={{ color: historyTab === "current" ? "var(--accent)" : "var(--text-muted)", borderBottom: historyTab === "current" ? "2px solid var(--accent)" : "2px solid transparent" }}
+                >
+                  💬 Session ({rounds.length})
+                </button>
+                <button
+                  onClick={() => setHistoryTab("history")}
+                  className="flex-1 py-2 text-xs font-mono transition-all"
+                  style={{ color: historyTab === "history" ? "var(--accent)" : "var(--text-muted)", borderBottom: historyTab === "history" ? "2px solid var(--accent)" : "2px solid transparent" }}
+                >
+                  📋 History ({serverSessions.length})
+                </button>
               </div>
-            )}
+
+              {historyTab === "current" ? (
+                <div className="p-3 flex-1 overflow-y-auto">
+                  {rounds.length === 0 ? (
+                    <div className="text-xs font-mono text-center py-4" style={{ color: "var(--text-muted)" }}>
+                      ยังไม่มีการสนทนา
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {rounds.map((r, i) => (
+                        <div key={i} className="text-xs font-mono p-2 rounded-lg border" style={{ borderColor: "var(--border)" }}>
+                          <div className="font-bold mb-0.5" style={{ color: "var(--text)" }}>รอบที่ {i + 1}</div>
+                          <div className="line-clamp-2" style={{ color: "var(--text-muted)" }}>{r.question}</div>
+                        </div>
+                      ))}
+                      <button onClick={clearSession} className="w-full text-xs font-mono px-2 py-1.5 rounded-lg border mt-1" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                        🗑 เริ่ม session ใหม่
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 flex-1 overflow-y-auto">
+                  {serverSessions.length === 0 ? (
+                    <div className="text-xs font-mono text-center py-4" style={{ color: "var(--text-muted)" }}>ไม่มีประวัติ</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {serverSessions.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => loadServerSession(s)}
+                          className="w-full text-left p-2 rounded-lg border transition-all"
+                          style={{
+                            borderColor: viewingSession?.id === s.id ? "var(--accent)" : "var(--border)",
+                            background: viewingSession?.id === s.id ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "transparent",
+                          }}
+                        >
+                          <div className="text-xs font-mono line-clamp-2" style={{ color: "var(--text)" }}>{s.question}</div>
+                          <div className="text-[10px] font-mono mt-1" style={{ color: "var(--text-muted)" }}>
+                            {s.status === "completed" ? "✅" : s.status === "error" ? "❌" : "⏳"}{" "}
+                            {new Date(s.startedAt).toLocaleDateString("th")}
+                            {s.totalTokens > 0 && ` · ${s.totalTokens.toLocaleString()} tokens`}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Main panel */}
-          <div className="flex-1 flex flex-col gap-4 min-w-0">
+          {/* ── Main panel ── */}
+          <div className="flex-1 flex flex-col gap-3 min-w-0">
 
-            {/* Conversation history (past rounds) */}
-            <div className="flex-1 overflow-y-auto space-y-6 min-h-[200px]">
+            {/* Viewing server session banner */}
+            {viewingSession && (
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border text-xs font-mono" style={{ borderColor: "color-mix(in srgb, var(--accent) 35%, transparent)", background: "color-mix(in srgb, var(--accent) 7%, transparent)", color: "var(--text-muted)" }}>
+                <span style={{ color: "var(--accent)" }}>📋 ดูประวัติ</span>
+                <span className="flex-1 truncate">{viewingSession.question}</span>
+                <button
+                  onClick={() => { setViewingSession(null); setHistoryTab("current"); }}
+                  className="ml-2 px-2 py-0.5 rounded border opacity-60 hover:opacity-100"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  ✕ ปิด
+                </button>
+              </div>
+            )}
 
-              {rounds.length === 0 && currentMessages.length === 0 && !running && (
+            {/* Messages area */}
+            <div className="flex-1 overflow-y-auto space-y-6 min-h-[300px]">
+
+              {/* Empty state */}
+              {!viewingSession && displayRounds.length === 0 && currentMessages.length === 0 && !running && (
                 <div className="text-center py-20 font-mono text-sm" style={{ color: "var(--text-muted)" }}>
                   ส่งคำถามเพื่อเริ่มต้น — agents จะวิเคราะห์และถกเถียงกัน<br />
-                  <span className="text-xs opacity-60">ถามต่อเรื่อย ๆ ได้ agents จะจำ context ทั้งหมด</span>
+                  <span className="text-xs opacity-60">ถามต่อเรื่อย ๆ ได้ agents จำ context ทุกรอบ · refresh ก็ไม่หาย</span>
                 </div>
               )}
 
-              {/* Past rounds */}
-              {rounds.map((round, roundIndex) => (
+              {/* Viewing server session */}
+              {viewingSession && (
+                <div className="space-y-3">
+                  <div className="flex justify-end">
+                    <div className="max-w-xl px-4 py-3 rounded-2xl rounded-tr-sm text-sm font-mono" style={{ background: "var(--accent)", color: "#000" }}>
+                      {viewingSession.question}
+                    </div>
+                  </div>
+                  {viewingSession.messages.map((msg) => (
+                    <div key={msg.id} className={`border rounded-xl p-4 ${ROLE_COLOR[msg.role] ?? ""}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-lg">{msg.agentEmoji}</span>
+                        <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>{msg.agentName}</span>
+                        <span className="text-xs font-mono px-2 py-0.5 rounded border" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
+                          {ROLE_LABEL[msg.role] ?? msg.role}
+                        </span>
+                      </div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{msg.content}</div>
+                    </div>
+                  ))}
+                  {viewingSession.finalAnswer && (
+                    <div className="border-2 rounded-xl p-5" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
+                      <div className="font-mono font-bold text-sm mb-3" style={{ color: "var(--accent)" }}>✅ คำตอบสุดท้าย</div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{viewingSession.finalAnswer}</div>
+                      <button
+                        onClick={() => { setViewingSession(null); setHistoryTab("current"); setQuestion(viewingSession.question); }}
+                        className="mt-3 text-xs font-mono px-3 py-1.5 rounded-lg border"
+                        style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                      >
+                        🔄 ถามคำถามนี้อีกครั้ง
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Current session rounds */}
+              {!viewingSession && displayRounds.map((round, roundIndex) => (
                 <div key={roundIndex} className="space-y-3">
                   {/* Round separator */}
                   <div className="flex items-center gap-3">
                     <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
-                    <div
-                      className="text-xs font-mono px-3 py-1 rounded-full border"
-                      style={{ borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 8%, transparent)" }}
-                    >
+                    <div className="text-xs font-mono px-3 py-1 rounded-full border" style={{ borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 8%, transparent)" }}>
                       รอบที่ {roundIndex + 1}
                     </div>
                     <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
@@ -437,10 +547,7 @@ export default function ResearchPage() {
 
                   {/* Question bubble */}
                   <div className="flex justify-end">
-                    <div
-                      className="max-w-xl px-4 py-3 rounded-2xl rounded-tr-sm text-sm font-mono"
-                      style={{ background: "var(--accent)", color: "#000" }}
-                    >
+                    <div className="max-w-xl px-4 py-3 rounded-2xl rounded-tr-sm text-sm font-mono" style={{ background: "var(--accent)", color: "#000" }}>
                       {round.question}
                     </div>
                   </div>
@@ -455,14 +562,10 @@ export default function ResearchPage() {
                           {ROLE_LABEL[msg.role] ?? msg.role}
                         </span>
                         {msg.tokensUsed > 0 && (
-                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>
-                            {msg.tokensUsed.toLocaleString()} tokens
-                          </span>
+                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>{msg.tokensUsed.toLocaleString()} tokens</span>
                         )}
                       </div>
-                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
-                        {msg.content}
-                      </div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{msg.content}</div>
                     </div>
                   ))}
 
@@ -470,25 +573,17 @@ export default function ResearchPage() {
                   {round.finalAnswer && (
                     <div className="border-2 rounded-xl p-5" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
                       <div className="font-mono font-bold text-sm mb-3" style={{ color: "var(--accent)" }}>✅ คำตอบสุดท้าย</div>
-                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
-                        {round.finalAnswer}
-                      </div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{round.finalAnswer}</div>
                     </div>
                   )}
 
-                  {/* Follow-up suggestions (only last round) */}
-                  {roundIndex === rounds.length - 1 && round.suggestions.length > 0 && currentMessages.length === 0 && (
+                  {/* Follow-up suggestions — only last round when idle */}
+                  {roundIndex === displayRounds.length - 1 && round.suggestions.length > 0 && !running && currentMessages.length === 0 && (
                     <div className="space-y-2">
-                      <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>💡 คำถามต่อเนื่องที่น่าถาม:</div>
-                      <div className="flex flex-col gap-2">
+                      <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>💡 คำถามต่อเนื่อง:</div>
+                      <div className="flex flex-col gap-1.5">
                         {round.suggestions.map((s, i) => (
-                          <button
-                            key={i}
-                            onClick={() => handleRun(s)}
-                            disabled={running}
-                            className="text-left px-3 py-2 rounded-lg border text-xs font-mono transition-all hover:opacity-80 disabled:opacity-40"
-                            style={{ borderColor: "var(--border)", color: "var(--text)", background: "var(--surface)" }}
-                          >
+                          <button key={i} onClick={() => handleRun(s)} disabled={running} className="text-left px-3 py-2 rounded-lg border text-xs font-mono transition-all hover:opacity-80 disabled:opacity-40" style={{ borderColor: "var(--border)", color: "var(--text)", background: "var(--surface)" }}>
                             → {s}
                           </button>
                         ))}
@@ -498,29 +593,24 @@ export default function ResearchPage() {
                 </div>
               ))}
 
-              {/* Current round (in progress) */}
-              {(currentMessages.length > 0 || running) && (
+              {/* Current round in progress */}
+              {!viewingSession && (currentMessages.length > 0 || running) && (
                 <div className="space-y-3">
-                  {rounds.length > 0 && (
+                  {displayRounds.length > 0 && (
                     <div className="flex items-center gap-3">
                       <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
-                      <div
-                        className="text-xs font-mono px-3 py-1 rounded-full border"
-                        style={{ borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 8%, transparent)" }}
-                      >
-                        รอบที่ {rounds.length + 1}
+                      <div className="text-xs font-mono px-3 py-1 rounded-full border" style={{ borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 8%, transparent)" }}>
+                        รอบที่ {displayRounds.length + 1}
                       </div>
                       <div className="flex-1 border-t" style={{ borderColor: "var(--border)" }} />
                     </div>
                   )}
-
                   {status && (
                     <div className="text-xs font-mono px-3 py-2 rounded-lg border" style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}>
                       {running && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 mr-2 animate-pulse" />}
                       {status}
                     </div>
                   )}
-
                   {currentMessages.map((msg) => (
                     <div key={msg.id} className={`border rounded-xl p-4 ${ROLE_COLOR[msg.role] ?? ""}`}>
                       <div className="flex items-center gap-2 mb-2">
@@ -530,23 +620,16 @@ export default function ResearchPage() {
                           {ROLE_LABEL[msg.role] ?? msg.role}
                         </span>
                         {msg.tokensUsed > 0 && (
-                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>
-                            {msg.tokensUsed.toLocaleString()} tokens
-                          </span>
+                          <span className="text-xs font-mono ml-auto" style={{ color: "var(--text-muted)" }}>{msg.tokensUsed.toLocaleString()} tokens</span>
                         )}
                       </div>
-                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
-                        {msg.content}
-                      </div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{msg.content}</div>
                     </div>
                   ))}
-
                   {currentFinalAnswer && (
                     <div className="border-2 rounded-xl p-5" style={{ borderColor: "var(--accent)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
                       <div className="font-mono font-bold text-sm mb-3" style={{ color: "var(--accent)" }}>✅ คำตอบสุดท้าย</div>
-                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>
-                        {currentFinalAnswer}
-                      </div>
+                      <div className="text-sm font-mono whitespace-pre-wrap leading-relaxed" style={{ color: "var(--text)" }}>{currentFinalAnswer}</div>
                     </div>
                   )}
                 </div>
@@ -555,49 +638,43 @@ export default function ResearchPage() {
               <div ref={bottomRef} />
             </div>
 
-            {/* Input box — always visible */}
-            <div
-              className="border rounded-xl p-4 flex-shrink-0"
-              style={{ borderColor: running ? "var(--accent)" : "var(--border)", background: "var(--surface)" }}
-            >
-              <textarea
-                ref={textareaRef}
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun();
-                }}
-                disabled={running}
-                rows={2}
-                placeholder={rounds.length > 0 ? "ถามต่อเลย... agents จำ context ทั้งหมด (Cmd+Enter)" : "พิมพ์คำถาม... (Cmd+Enter เพื่อส่ง)"}
-                className="w-full bg-transparent font-mono text-sm resize-none outline-none"
-                style={{ color: "var(--text)" }}
-              />
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-                  {rounds.length > 0 && <span style={{ color: "var(--accent)" }}>{rounds.length} รอบ · </span>}
-                  {selectedIds.size} agents · Cmd+Enter
-                </div>
-                <div className="flex gap-2">
-                  {running && (
+            {/* Input box */}
+            {!viewingSession && (
+              <div className="border rounded-xl p-4 flex-shrink-0" style={{ borderColor: running ? "var(--accent)" : "var(--border)", background: "var(--surface)" }}>
+                <textarea
+                  ref={textareaRef}
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleRun(); }}
+                  disabled={running}
+                  rows={2}
+                  placeholder={rounds.length > 0 ? "ถามต่อเลย... agents จำ context ทุกรอบ · refresh ก็ไม่หาย (Cmd+Enter)" : "พิมพ์คำถาม... (Cmd+Enter เพื่อส่ง)"}
+                  className="w-full bg-transparent font-mono text-sm resize-none outline-none"
+                  style={{ color: "var(--text)" }}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                    {rounds.length > 0 && <span style={{ color: "var(--accent)" }}>{rounds.length} รอบ · </span>}
+                    {selectedIds.size} agents · Cmd+Enter
+                  </div>
+                  <div className="flex gap-2">
+                    {running && (
+                      <button onClick={handleStop} className="px-4 py-1.5 rounded-lg text-xs font-mono border border-red-500/30 text-red-400">
+                        ⏹ หยุด
+                      </button>
+                    )}
                     <button
-                      onClick={handleStop}
-                      className="px-4 py-1.5 rounded-lg text-xs font-mono border border-red-500/30 text-red-400"
+                      onClick={() => handleRun()}
+                      disabled={!question.trim() || selectedIds.size === 0 || running}
+                      className="px-5 py-1.5 rounded-lg text-xs font-mono font-bold disabled:opacity-40 transition-all"
+                      style={{ background: "var(--accent)", color: "#000" }}
                     >
-                      ⏹ หยุด
+                      {running ? "กำลังทำงาน..." : "▶ ส่ง"}
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleRun()}
-                    disabled={!question.trim() || selectedIds.size === 0 || running}
-                    className="px-5 py-1.5 rounded-lg text-xs font-mono font-bold disabled:opacity-40 transition-all"
-                    style={{ background: "var(--accent)", color: "#000" }}
-                  >
-                    {running ? "กำลังทำงาน..." : "▶ ส่ง"}
-                  </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
