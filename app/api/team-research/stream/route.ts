@@ -135,14 +135,20 @@ function sseEvent(encoder: TextEncoder, event: string, data: unknown): Uint8Arra
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+interface ConversationTurn {
+  question: string;
+  answer: string;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { question, agentIds, dataSource, mcpEndpoint, dbConnectionString } = body as {
+  const { question, agentIds, dataSource, mcpEndpoint, dbConnectionString, conversationHistory } = body as {
     question: string;
     agentIds: string[];
     dataSource?: string;
     mcpEndpoint?: string;
     dbConnectionString?: string;
+    conversationHistory?: ConversationTurn[];
   };
 
   if (!question || !agentIds?.length) {
@@ -221,10 +227,14 @@ export async function POST(req: NextRequest) {
           appendResearchMessage(session.id, thinkingMsg);
           send("message", thinkingMsg);
 
+          const historyContext = conversationHistory && conversationHistory.length > 0
+            ? `\n\n---\nประวัติการสนทนาก่อนหน้า:\n${conversationHistory.map((t, i) => `[รอบที่ ${i + 1}] คำถาม: ${t.question}\nสรุป: ${t.answer}`).join("\n\n")}\n---\n`
+            : "";
+
           const result = await callLLM(agent.provider, agent.model, apiKey, agent.baseUrl, [
             {
               role: "system",
-              content: agent.soul + dataSourceContext,
+              content: agent.soul + dataSourceContext + historyContext,
             },
             {
               role: "user",
@@ -371,6 +381,34 @@ export async function POST(req: NextRequest) {
           send("message", synthMsg);
           send("final_answer", { content: result.content });
           completeResearchSession(session.id, result.content, "completed");
+
+          // Generate follow-up suggestions
+          try {
+            const historyForFollowup = conversationHistory && conversationHistory.length > 0
+              ? `ประวัติการสนทนา:\n${conversationHistory.map((t, i) => `รอบที่ ${i + 1}: ${t.question}`).join("\n")}\n\n`
+              : "";
+            const followupResult = await callLLM(synthAgent.provider, synthAgent.model, synthApiKey, synthAgent.baseUrl, [
+              {
+                role: "system",
+                content: "คุณช่วยแนะนำคำถามต่อเนื่องที่น่าสนใจ ตอบในรูปแบบ JSON array เท่านั้น เช่น [\"คำถาม 1\", \"คำถาม 2\", \"คำถาม 3\"]",
+              },
+              {
+                role: "user",
+                content: `${historyForFollowup}คำถามล่าสุด: ${question}\n\nสรุปคำตอบ: ${result.content.slice(0, 500)}\n\nแนะนำ 3 คำถามต่อเนื่องที่ควรถามต่อ ตอบเป็น JSON array เท่านั้น ไม่ต้องมีข้อความอื่น`,
+              },
+            ]);
+            try {
+              const jsonMatch = followupResult.content.match(/\[[\s\S]*\]/);
+              const suggestions: string[] = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+              if (suggestions.length > 0) {
+                send("follow_up_suggestions", { suggestions: suggestions.slice(0, 3) });
+              }
+            } catch {
+              // ignore parse error
+            }
+          } catch {
+            // ignore follow-up error
+          }
         } catch (err) {
           completeResearchSession(session.id, String(err), "error");
           send("error", { message: String(err) });
