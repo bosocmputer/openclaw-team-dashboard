@@ -831,11 +831,11 @@ export default function AgentsPage() {
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-mono mb-1 block" style={{ color: "var(--text-muted)" }}>MCP Endpoint URL</label>
+                    <label className="text-xs font-mono mb-1 block" style={{ color: "var(--text-muted)" }}>MCP Endpoint URL <span className="font-normal">(ใส่ base URL เช่น http://ip:3002)</span></label>
                     <input
                       value={form.mcpEndpoint}
                       onChange={(e) => { setForm((f) => ({ ...f, mcpEndpoint: e.target.value })); setMcpTestResult(null); }}
-                      placeholder="http://192.168.1.100:3000"
+                      placeholder="http://192.168.1.100:3002"
                       className="w-full px-3 py-2 rounded-lg border font-mono text-sm"
                       style={{ background: "var(--surface)", borderColor: "var(--border)", color: "var(--text)" }}
                     />

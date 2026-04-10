@@ -9,9 +9,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing endpoint" }, { status: 400 });
   }
 
+  // Normalize: strip trailing slash and known MCP paths so user can paste any form
+  const base = endpoint.replace(/\/(health|tools|call|mcp|sse)\/?$/, "").replace(/\/$/, "");
+
   try {
     // Test health endpoint
-    const healthRes = await fetch(`${endpoint}/health`, {
+    const healthRes = await fetch(`${base}/health`, {
       headers: { "mcp-access-mode": mode },
       signal: AbortSignal.timeout(6000),
     });
@@ -23,7 +26,7 @@ export async function GET(req: NextRequest) {
     // Get available tools
     let toolCount = 0;
     try {
-      const toolsRes = await fetch(`${endpoint}/tools`, {
+      const toolsRes = await fetch(`${base}/tools`, {
         headers: { "mcp-access-mode": mode },
         signal: AbortSignal.timeout(6000),
       });

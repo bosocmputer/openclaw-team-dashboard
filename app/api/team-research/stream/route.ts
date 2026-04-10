@@ -135,9 +135,11 @@ async function callLLM(
 
 // Fetch MCP tools and call relevant ones for context
 async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, question: string): Promise<string> {
+  // Normalize endpoint — strip trailing slash and known MCP paths
+  const base = mcpEndpoint.replace(/\/(health|tools|call|mcp|sse)\/?$/, "").replace(/\/$/, "");
   try {
     // Get available tools
-    const toolsRes = await fetch(`${mcpEndpoint}/tools`, {
+    const toolsRes = await fetch(`${base}/tools`, {
       headers: { "mcp-access-mode": mcpAccessMode },
       signal: AbortSignal.timeout(6000),
     });
@@ -158,7 +160,7 @@ async function fetchMcpContext(mcpEndpoint: string, mcpAccessMode: string, quest
     const results: string[] = [];
     for (const tool of scored) {
       try {
-        const callRes = await fetch(`${mcpEndpoint}/call`, {
+        const callRes = await fetch(`${base}/call`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
