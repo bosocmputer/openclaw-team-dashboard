@@ -142,13 +142,14 @@ interface ConversationTurn {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { question, agentIds, dataSource, mcpEndpoint, dbConnectionString, conversationHistory } = body as {
+  const { question, agentIds, dataSource, mcpEndpoint, dbConnectionString, conversationHistory, fileContexts } = body as {
     question: string;
     agentIds: string[];
     dataSource?: string;
     mcpEndpoint?: string;
     dbConnectionString?: string;
     conversationHistory?: ConversationTurn[];
+    fileContexts?: { filename: string; meta: string; context: string }[];
   };
 
   if (!question || !agentIds?.length) {
@@ -231,14 +232,18 @@ export async function POST(req: NextRequest) {
             ? `\n\n---\nประวัติการสนทนาก่อนหน้า:\n${conversationHistory.map((t, i) => `[รอบที่ ${i + 1}] คำถาม: ${t.question}\nสรุป: ${t.answer}`).join("\n\n")}\n---\n`
             : "";
 
+          const fileContext = fileContexts && fileContexts.length > 0
+            ? `\n\n---\n📎 เอกสารอ้างอิงที่แนบมา (ใช้ข้อมูลเหล่านี้ประกอบการวิเคราะห์):\n${fileContexts.map((f) => `[${f.meta}]\n${f.context}`).join("\n\n---\n")}\n---\n`
+            : "";
+
           const result = await callLLM(agent.provider, agent.model, apiKey, agent.baseUrl, [
             {
               role: "system",
-              content: agent.soul + dataSourceContext + historyContext,
+              content: agent.soul + dataSourceContext + historyContext + fileContext,
             },
             {
               role: "user",
-              content: `คำถาม: ${question}\n\nกรุณาวิเคราะห์และให้ข้อมูล/ความเห็นตามบทบาทของคุณ (${agent.role}) อย่างละเอียดและมีเหตุผล`,
+              content: `คำถาม: ${question}\n\nกรุณาวิเคราะห์และให้ข้อมูล/ความเห็นตามบทบาทของคุณ (${agent.role}) อย่างละเอียดและมีเหตุผล${fileContexts?.length ? " โดยอ้างอิงข้อมูลจากเอกสารที่แนบมาด้วย" : ""}`,
             },
           ]);
 

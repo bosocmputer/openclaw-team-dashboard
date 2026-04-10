@@ -53,6 +53,29 @@ interface ServerSession {
   finalAnswer?: string;
 }
 
+interface AttachedFile {
+  filename: string;
+  meta: string;
+  context: string;
+  chars: number;
+  size: number;
+}
+
+const SUPPORTED_EXTENSIONS = [
+  ".xlsx", ".xls", ".xlsm",
+  ".pdf",
+  ".docx", ".doc",
+  ".csv",
+  ".json",
+  ".txt", ".md", ".log",
+];
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 const STORAGE_KEY = "research_conversation_v1";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -93,6 +116,13 @@ export default function ResearchPage() {
   const [currentMessages, setCurrentMessages] = useState<ResearchMessage[]>([]);
   const [currentFinalAnswer, setCurrentFinalAnswer] = useState("");
   const [currentSuggestions, setCurrentSuggestions] = useState<string[]>([]);
+
+  // File attachments
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Server history
   const [serverSessions, setServerSessions] = useState<ServerSession[]>([]);
@@ -162,6 +192,44 @@ export default function ResearchPage() {
     });
   };
 
+  const uploadFile = async (file: File) => {
+    setUploadError("");
+    const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
+    if (!SUPPORTED_EXTENSIONS.includes(ext)) {
+      setUploadError(`ไม่รองรับไฟล์ประเภท ${ext} — รองรับ: ${SUPPORTED_EXTENSIONS.join(", ")}`);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError(`ไฟล์ใหญ่เกิน 10MB (${formatBytes(file.size)})`);
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/team-research/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setAttachedFiles((prev) => [...prev, { filename: data.filename, meta: data.meta, context: data.context, chars: data.chars, size: file.size }]);
+    } catch (e) {
+      setUploadError(String(e));
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    files.forEach(uploadFile);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    Array.from(e.dataTransfer.files).forEach(uploadFile);
+  };
+
   const buildHistory = (): ConversationTurn[] =>
     rounds.map((r) => ({ question: r.question, answer: r.finalAnswer }));
 
@@ -193,6 +261,7 @@ export default function ResearchPage() {
           mcpEndpoint: dataSource === "mcp" ? mcpEndpoint.trim() : undefined,
           dbConnectionString: dataSource === "database" ? dbConnectionString.trim() : undefined,
           conversationHistory: buildHistory(),
+          fileContexts: attachedFiles.length > 0 ? attachedFiles.map(f => ({ filename: f.filename, meta: f.meta, context: f.context })) : undefined,
         }),
         signal: abortRef.current.signal,
       });
@@ -394,6 +463,88 @@ export default function ResearchPage() {
               )}
               {dataSource === "database" && (
                 <input type="text" value={dbConnectionString} onChange={(e) => setDbConnectionString(e.target.value)} placeholder="mysql://user:pass@host/db" className="w-full mt-2 px-2 py-1.5 rounded-lg border text-xs font-mono outline-none" style={{ background: "var(--bg)", borderColor: "var(--border)", color: "var(--text)" }} />
+              )}
+            </div>
+
+            {/* File Attachment Panel */}
+            <div
+              className="border rounded-xl p-3"
+              style={{ borderColor: isDragOver ? "var(--accent)" : "var(--border)", background: "var(--surface)" }}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-mono font-bold" style={{ color: "var(--text-muted)" }}>
+                  📎 แนบไฟล์อ้างอิง ({attachedFiles.length})
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="text-xs font-mono px-2 py-1 rounded-lg border transition-all disabled:opacity-40"
+                  style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                >
+                  {uploadingFile ? "⏳" : "+ แนบ"}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={SUPPORTED_EXTENSIONS.join(",")}
+                  onChange={handleFileInput}
+                  className="hidden"
+                  aria-label="แนบไฟล์อ้างอิง"
+                />
+              </div>
+
+              {/* Drop zone hint */}
+              {attachedFiles.length === 0 && !uploadingFile && (
+                <div
+                  className="border-2 border-dashed rounded-lg p-3 text-center text-xs font-mono transition-all"
+                  style={{ borderColor: isDragOver ? "var(--accent)" : "var(--border)", color: "var(--text-muted)", background: isDragOver ? "color-mix(in srgb, var(--accent) 5%, transparent)" : "transparent" }}
+                >
+                  {isDragOver ? "ปล่อยไฟล์เลย!" : "Drag & Drop หรือกด + แนบ"}
+                  <div className="mt-1 opacity-60">xlsx · pdf · docx · csv · json · txt · md</div>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="mt-1 text-xs font-mono text-red-400">{uploadError}</div>
+              )}
+
+              {/* Attached files list */}
+              {attachedFiles.length > 0 && (
+                <div className="space-y-1.5 mt-1">
+                  {attachedFiles.map((f, i) => (
+                    <div key={i} className="flex items-start gap-2 p-2 rounded-lg border" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--accent) 5%, transparent)" }}>
+                      <span className="text-sm flex-shrink-0">
+                        {f.filename.endsWith(".xlsx") || f.filename.endsWith(".xls") || f.filename.endsWith(".csv") ? "📊" :
+                         f.filename.endsWith(".pdf") ? "📄" :
+                         f.filename.endsWith(".docx") || f.filename.endsWith(".doc") ? "📝" : "📋"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-mono font-bold truncate" style={{ color: "var(--text)" }}>{f.filename}</div>
+                        <div className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>
+                          {formatBytes(f.size)} · {f.chars.toLocaleString()} chars
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setAttachedFiles((prev) => prev.filter((_, j) => j !== i))}
+                        className="text-xs opacity-40 hover:opacity-100 flex-shrink-0"
+                        style={{ color: "var(--text-muted)" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setAttachedFiles([])}
+                    className="w-full text-[10px] font-mono py-1 rounded border"
+                    style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                  >
+                    ลบทั้งหมด
+                  </button>
+                </div>
               )}
             </div>
 
