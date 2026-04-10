@@ -203,10 +203,13 @@ curl -X POST http://192.168.2.109:3001/api/team-settings \
 
 ## Phase ถัดไป (ยังไม่ได้ทำ)
 
-### Phase 4 — MCP & Database Connector
-- เปิดใช้ Data Source selector จริงใน Meeting Room
-- MCP Server connector (ระบุ endpoint)
-- Database connector (MySQL/PostgreSQL read-only)
+### Phase 4 — MCP Per-Agent ✅ สมบูรณ์ (2026-04-10)
+- **Per-agent MCP config:** `mcpEndpoint` + `mcpAccessMode` (admin/sales/purchase/stock/general) ต่อ agent
+- **Test button:** เรียก `GET /health` → `GET /tools` แสดงจำนวน tools พร้อมใช้งาน
+- **Endpoint normalize:** รองรับ `http://ip:3002`, `http://ip:3002/mcp`, มี trailing slash ก็ได้
+- **stream/route.ts:** agent ที่มี mcpEndpoint จะ fetch `/tools` → เรียก `/call` tools ที่ match question (สูงสุด 3 tools) → inject เป็น context ก่อนตอบ
+- **Data Source panel:** ตัด MCP endpoint input + database ออก → เหลือแค่ file attachments + แสดง "📎 เอกสารที่แนบ + 🔌 MCP ตาม Agent"
+- **MCP Protocol:** Direct REST `/call` — `POST {endpoint}/call` + header `mcp-access-mode`
 
 ### Phase 5 — Pixel Office Visualization
 - Speech bubbles แบบ real-time บน canvas ระหว่างประชุม
