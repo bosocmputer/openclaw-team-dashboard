@@ -262,7 +262,9 @@ export default function ResearchPage() {
   const [viewingSession, setViewingSession] = useState<ServerSession | null>(null);
   const [historyTab, setHistoryTab] = useState<"current" | "history">("current");
 
+  const [autoScroll, setAutoScroll] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentFinalAnswerRef = useRef("");
@@ -317,8 +319,23 @@ export default function ResearchPage() {
   }, [fetchAgents, fetchServerHistory]);
 
   useEffect(() => {
+    if (autoScroll) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentMessages, rounds, autoScroll]);
+
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // ถ้าอยู่ห่างจากล่างสุดไม่เกิน 80px ถือว่าอยู่ล่างสุด
+    setAutoScroll(distFromBottom < 80);
+  };
+
+  const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentMessages, rounds]);
+    setAutoScroll(true);
+  };
 
   const toggleAgent = (id: string) => {
     setSelectedIds((prev) => {
@@ -420,6 +437,7 @@ export default function ResearchPage() {
     setStatus("");
     setChairmanId(null);
     setSearchingAgents(new Set());
+    setAutoScroll(true);
     if (!overrideQuestion) setQuestion("");
 
     abortRef.current = new AbortController();
@@ -857,7 +875,11 @@ export default function ResearchPage() {
             )}
 
             {/* Messages area */}
-            <div className="flex-1 overflow-y-auto space-y-6 min-h-[300px]">
+            <div
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto space-y-6 min-h-[300px] relative"
+            >
 
               {/* Empty state */}
               {!viewingSession && displayRounds.length === 0 && currentMessages.length === 0 && !running && (
@@ -1009,6 +1031,19 @@ export default function ResearchPage() {
               )}
 
               <div ref={bottomRef} />
+              {/* Scroll to bottom button */}
+              {!autoScroll && running && (
+                <div className="sticky bottom-3 flex justify-center pointer-events-none">
+                  <button
+                    type="button"
+                    onClick={scrollToBottom}
+                    className="pointer-events-auto px-4 py-2 rounded-full text-xs font-mono font-bold shadow-lg transition-all bg-accent text-black"
+                    style={{ background: "var(--accent)", color: "#000" }}
+                  >
+                    ⬇ ไปล่างสุด
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Input box */}
