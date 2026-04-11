@@ -275,6 +275,7 @@ const NAV_ITEMS: { group: string; items: { href: string; icon: NavIconName; labe
       { href: "/teams", icon: "teams", labelKey: "nav.teams" },
       { href: "/research", icon: "research", labelKey: "nav.research" },
       { href: "/pixel-office-research", icon: "meetingRoom", labelKey: "nav.meetingRoom" },
+      { href: "/mock-trial", icon: "agents", labelKey: "nav.mockTrial" },
     ],
   },
   {

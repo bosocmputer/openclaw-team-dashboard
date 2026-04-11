@@ -1,58 +1,47 @@
 # OpenClaw Team Dashboard
 
-A multi-agent research and monitoring dashboard built on top of [OpenClaw](https://github.com/openclaw/openclaw). Create a team of AI agents with different providers, ask them any question, and watch them research, discuss, and synthesize the best answer together — all visualized in a pixel-art office.
+AI Meeting Room — สร้างทีม AI agents หลายตัว ถามคำถามเดียว แล้วดู agents ถกเถียง วิเคราะห์ และสรุปมติร่วมกัน แบบ real-time ทั้งในรูปแบบ text และ pixel-art meeting room
 
 > **Forked and extended from** [xmanrui/OpenClaw-bot-review](https://github.com/xmanrui/OpenClaw-bot-review)
 
 ---
 
-## What's New (Custom Features)
+## Features
 
-### 👥 Team Agents
-Manage your own team of AI agents — each with their own provider, model, API key, and **soul** (system prompt/personality).
+### 👥 Team Agents (`/agents`)
+สร้างและจัดการทีม AI agents — แต่ละตัวมี provider, model, API key, soul (บุคลิก), skills, MCP endpoint เป็นของตัวเอง
 
-- Add / Edit / Delete agents
-- Providers: Anthropic, OpenAI, Google Gemini, Ollama (local), Custom OpenAI-compatible
-- API keys stored encrypted (AES-256-CBC) in `~/.openclaw-team/agents.json`
-- Soul templates: Researcher 🔍 / Analyst 📊 / Synthesizer ✍️ / Critic 🎯 / Custom
-- Enable / disable agents without deleting
+- **19 Agent Templates** สำเร็จรูป: CEO, CFO, CMO, Legal, HR, Sales, Ops, Software Architect, Security Engineer ฯลฯ
+- **6 Providers:** Anthropic, OpenAI, Google Gemini, Ollama, OpenRouter, Custom
+- **16 Skills** per agent: web_search, code_execution, data_analysis, financial_modeling ฯลฯ
+- **Soul (System Prompt)** — กำหนดบุคลิก จุดยืน และวิธีถกเถียงของ agent
+- **MCP Endpoint** — เชื่อม MCP Server per agent เพื่อดึงข้อมูลจากระบบภายนอก
+- **Seniority (1–99)** — ลำดับพูดในการประชุม
+- API keys encrypted (AES-256-CBC)
 
-### 🔬 Team Research
-Send any question to your agent team and watch them collaborate in real time.
+### 🏛️ Meeting Room (`/research`)
+ห้องประชุม AI — ประธานนำทีมถกเถียงและสรุปมติทุกวาระ
 
-- **Phase 1 — Independent Research:** each agent calls its own LLM API and analyzes the question from its role/soul perspective
-- **Phase 2 — Cross Discussion:** agents read each other's findings and add comments / agreements / disagreements
-- **Phase 3 — Synthesis:** final answer synthesized from all findings
-- Real-time streaming via SSE (Server-Sent Events)
-- Token usage tracked per agent (input / output / total)
-- Research history saved (last 100 sessions)
+- **3-Phase Meeting Flow:**
+  1. **นำเสนอ** — agents พูดตามลำดับ seniority จาก soul/role
+  2. **อภิปราย** — agents อ่านความเห็นกัน แสดงจุดยืน เห็นด้วย/ไม่เห็นด้วย
+  3. **มติประธาน** — Chairman สรุป + Action Items
+- **Chairman Auto-Detection** จาก role/seniority
+- **Real-time SSE Streaming** — ดูทุก agent ตอบ real-time
+- **Data Sources:**
+  - 📎 File Attachment (xlsx/pdf/docx/csv/json/txt, max 10MB)
+  - 🔌 MCP per Agent (ดึงข้อมูลจาก MCP Server อัตโนมัติ)
+  - 🌐 Web Search (Serper/SerpApi) per agent
+- **Token Tracking** per agent (input/output/total)
+- **Charts**: Auto-render Bar/Line/Pie จาก AI output
+- **History**: ดูประวัติ sessions เก่า + follow-up suggestions
+- **Export**: Meeting Minutes เป็น Markdown
 
-### 🏢 Pixel Office Research Bar
-Ask your team directly from the Pixel Office — no need to leave the canvas.
+### 🏛️ Pixel Meeting Room (`/pixel-office-research`)
+ฟีเจอร์เดียวกับ `/research` แต่แสดงบน pixel-art canvas — agents นั่งรอบโต๊ะประชุม พร้อม animation
 
-- Agent selector pills at the bottom
-- Type your question and press Enter
-- See live responses and token counts without leaving the office
-- Link to full Research page for complete conversation
-
-### 🔌 Data Source Selector (Phase 3 — coming)
-- MCP Server connector
-- MySQL / PostgreSQL read-only connector for context injection
-
----
-
-## Original Features (from OpenClaw-bot-review)
-
-- **Bot Overview** — Card wall with name, emoji, model, platform bindings, session stats
-- **Model List** — All configured providers and models with per-model test
-- **Session Management** — Browse sessions per agent with token usage and connectivity test
-- **Statistics** — Token consumption and response time trends (daily / weekly / monthly)
-- **Skill Management** — View all installed skills with search and filter
-- **Alert Center** — Rule-based alerts via Feishu notification
-- **Gateway Health** — Real-time gateway status, 10s polling
-- **Pixel Office** — Animated pixel-art office with agent characters, furniture editor, contribution heatmap
-- **Dark / Light Theme** — Theme switcher in sidebar
-- **i18n** — English / Chinese language switching
+### 📋 Teams (`/teams`)
+จัดกลุ่ม agents เป็น teams เพื่อเลือกใช้ใน Research
 
 ---
 
@@ -72,8 +61,7 @@ Open [http://localhost:3000](http://localhost:3000)
 ## Requirements
 
 - Node.js 22+
-- No OpenClaw installation required for Team features (calls LLM APIs directly)
-- For original monitoring features: OpenClaw installed with `~/.openclaw/openclaw.json`
+- No database required — ทุกอย่างเก็บเป็น JSON files
 
 ---
 
@@ -82,8 +70,9 @@ Open [http://localhost:3000](http://localhost:3000)
 | File | Contents |
 |------|----------|
 | `~/.openclaw-team/agents.json` | Agent configs (API keys encrypted) |
-| `~/.openclaw-team/research-history.json` | Last 100 research sessions |
-| `~/.openclaw/openclaw.json` | OpenClaw config (for original monitoring features) |
+| `~/.openclaw-team/teams.json` | Team groupings |
+| `~/.openclaw-team/settings.json` | Web Search API keys (encrypted) |
+| `~/.openclaw-team/research-history.json` | Research session history |
 
 ---
 
@@ -92,9 +81,6 @@ Open [http://localhost:3000](http://localhost:3000)
 ```env
 # Custom encryption key for API keys (recommended for production)
 AGENT_ENCRYPT_KEY=your-32-character-secret-key-here
-
-# Custom OpenClaw config path (for original monitoring features)
-OPENCLAW_HOME=/opt/openclaw
 ```
 
 ---
@@ -107,14 +93,16 @@ git clone https://github.com/bosocmputer/openclaw-team-dashboard.git
 cd openclaw-team-dashboard
 npm install
 npm run build
-cd .next/standalone
-PORT=3001 node server.js
+cp -r .next/static .next/standalone/.next/static
+PORT=3001 node .next/standalone/server.js
 
-# Update (use deploy script)
+# Update
 ./scripts/deploy.sh
 ```
 
-See [PLAN.md](PLAN.md) for full architecture, roadmap, and session continuity reference.
+> ⚠️ ต้อง `cp -r .next/static .next/standalone/.next/static` ทุกครั้ง ไม่งั้นจะเกิด ChunkLoadError
+
+See [PLAN.md](PLAN.md) for full architecture and roadmap.
 
 ---
 
@@ -125,15 +113,19 @@ See [PLAN.md](PLAN.md) for full architecture, roadmap, and session continuity re
 - **Storage:** JSON files (no database)
 - **Streaming:** Server-Sent Events (SSE)
 - **Encryption:** AES-256-CBC for API keys
-- **LLM Providers:** Anthropic, OpenAI, Google Gemini, Ollama, Custom
+- **LLM Providers:** Anthropic, OpenAI, Google Gemini, Ollama, OpenRouter, Custom
+- **MCP:** Direct REST protocol per agent
 
 ---
 
 ## Roadmap
 
-- [x] Phase 1 — Agent Management (CRUD, Provider, API Key, Soul)
-- [x] Phase 2 — Research Orchestration (3-phase, SSE streaming, token tracking)
-- [x] Pixel Office Research Bar
-- [ ] Phase 3 — MCP & Database connector
-- [ ] Phase 4 — Pixel Office canvas visualization (speech bubbles, data flow lines between agents)
-- [ ] Phase 5 — Team Management (group agents by purpose)
+- [x] Phase 1 — Agent Management (CRUD, 19 templates, 16 skills, soul, seniority)
+- [x] Phase 2 — Research Meeting Room (3-phase flow, SSE, charts, history)
+- [x] Phase 3 — File Attachment (xlsx/pdf/docx/csv/json/txt + Excel Sheet Selector)
+- [x] Phase 4 — MCP Per-Agent (endpoint, access mode, tool selection scoring)
+- [x] Pixel Office Meeting Room (canvas + full meeting features)
+- [x] Team Management CRUD
+- [ ] Phase 5 — ตัดหน้าที่ไม่ใช้ออก (original OpenClaw pages)
+- [ ] Phase 6 — Team ↔ Research integration (team selector, filter)
+- [ ] Phase 7 — Pixel Office visualization enhancement (speech bubbles, crown)

@@ -1,13 +1,44 @@
 # OpenClaw Team Dashboard — Project Plan
 
-> อ้างอิงเอกสารนี้เมื่อ token หมดหรือเริ่ม session ใหม่
+> อ้างอิงเอกสารนี้เมื่อ token หมดหรือเริ่ม session ใหม่  
+> อัปเดตล่าสุด: 2026-04-11
 
 ---
 
-## สิ่งที่สร้างแล้ว (สมบูรณ์ทั้งหมด)
+## สถานะโปรเจค (ณ วันที่ 11 เมษายน 2026)
 
-### 1. Agent Management System
-- **หน้า:** `/agents` — สร้าง/แก้ไข/ลบ/เปิด-ปิด agents
+**Server:** `http://192.168.2.109:3001` — ✅ Online (next-server v16, PID 1056571)  
+**Agents ที่ใช้งาน:** 9 ตัว (ทุกตัว active, ใช้ OpenRouter เป็น provider)  
+**Research Sessions:** 27 sessions สะสม  
+**Teams:** 0 (สร้างโครงสร้างเสร็จแล้ว ยังไม่ได้ใช้งาน)  
+**Web Search Keys:** ✅ Serper + SerpApi ตั้งค่าแล้ว  
+**MCP Endpoint:** 4 agents เชื่อมต่อ `http://192.168.2.213:3248/sse`
+
+### หน้าหลักที่ใช้งาน (4 หน้า)
+| หน้า | Path | สถานะ |
+|------|------|--------|
+| 👥 Team Agents | `/agents` | ✅ สมบูรณ์ — CRUD + 19 templates + MCP config |
+| 📋 Teams | `/teams` | ✅ CRUD สมบูรณ์ — ยังไม่มี team จริง |
+| 🔬 Research | `/research` | ✅ สมบูรณ์ — Meeting Flow 3 phases + MCP + File |
+| 🏛️ Meeting Room | `/pixel-office-research` | ✅ สมบูรณ์ — Pixel art + research features |
+
+### หน้าที่จะตัดออก (จาก OpenClaw เดิม)
+| หน้า | Path | เหตุผล |
+|------|------|--------|
+| Bot Overview | `/` | หน้า original OpenClaw — ไม่เกี่ยวกับ Team |
+| Pixel Office | `/pixel-office` | ใช้ `/pixel-office-research` แทน |
+| Models | `/models` | จัดการ model ผ่าน `/agents` แทน |
+| Sessions | `/sessions` | ไม่ได้ใช้ — research history อยู่ใน `/research` |
+| Stats | `/stats` | ไม่ได้ใช้ |
+| Alerts | `/alerts` | ไม่ได้ใช้ |
+| Skills | `/skills` | skill เลือกในหน้า `/agents` แล้ว |
+| Settings | `/settings` | Web Search keys ตั้งแล้ว — อาจรวมเข้า sidebar config |
+
+---
+
+## ฟีเจอร์ที่สร้างเสร็จแล้ว
+
+### 1. Agent Management (`/agents`) — ✅ สมบูรณ์
 - **API:** `GET/POST /api/team-agents`, `PATCH/DELETE /api/team-agents/[id]`
 - **เก็บข้อมูล:** `~/.openclaw-team/agents.json` (ไม่มี DB)
 - **ฟีเจอร์:**
@@ -16,92 +47,80 @@
   - เลือก Model (โหลดจาก `/api/team-models?provider=xxx`)
   - ตั้ง Base URL สำหรับ Ollama/Custom
   - ตั้ง Soul (System Prompt) — บุคลิกและบทบาทของ agent
-  - Soul Templates (6 แบบ + Custom): Researcher, Analyst, Synthesizer, Critic, Optimist, Pessimist
-  - **19 Agent Templates สำเร็จรูป** แบ่งเป็น 4 หมวด:
-    - Business (7): CEO, CFO, CMO, Legal Counsel, CHRO, Sales Coach, Operations Manager
-    - IT (8): Software Architect, Security Engineer, DevOps/SRE, Frontend, Backend, AI/ML, Data Engineer, QA Engineer, Product Manager
-    - Research (4): Academic Researcher, Devil's Advocate, Market Analyst, Risk Assessor
-    - General (2): Data Analyst, Synthesizer
-  - **16 Skills** ต่อ agent: web_search, code_execution, data_analysis, financial_modeling, legal_research, market_research, risk_assessment, ux_review, security_audit, system_design, devops, database, api_design, testing, summarization, translation
+  - **19 Agent Templates** แบ่ง 4 หมวด: Business(7) / IT(8) / Research(4) / General(2)
+  - **16 Skills** per agent
   - **useWebSearch toggle** — เปิด/ปิด Web Search per agent
-  - **Seniority slider (1–99)** — กำหนดลำดับพูดในการประชุม (1 = ประธาน, 99 = พูดท้าย)
+  - **Seniority slider (1–99)** — ลำดับพูดในประชุม
+  - **MCP Endpoint + Access Mode** — เชื่อม MCP Server per agent
   - เปิด/ปิด agent โดยไม่ลบ
+- **Agents ปัจจุบันบน server (9 ตัว):**
+  | Emoji | ชื่อ | Provider / Model | MCP |
+  |-------|------|-----------------|-----|
+  | 👔 | CEO Advisor | openrouter / claude-sonnet-4-5 | ✅ |
+  | 💰 | CFO Analyst | openrouter / gemini-2.0-flash | ✅ |
+  | 📣 | CMO Strategist | openrouter / gemini-2.0-flash | ✅ |
+  | 👥 | HR Lead | openrouter / gemini-2.0-flash | ✅ |
+  | ⚖️ | Legal Advisor | openrouter / claude-sonnet-4-5 | ❌ (web search ✅) |
+  | 🤝 | Sales Coach | openrouter / gemini-2.0-flash | ❌ |
+  | ⚙️ | Ops Manager | openrouter / gemini-2.0-flash | ❌ |
+  | 💰 | คุณไอ้ติม (หัวหน้าบัญชี) | openrouter / claude-sonnet-4-5 | ❌ |
+  | 🤖 | คุณอัย (พนักงานบัญชี) | openrouter / gemini-2.0-flash | ❌ |
 
-### 2. Settings
-- **หน้า:** `/settings` — ตั้งค่า API Keys สำหรับ Web Search
-- **API:** `GET/POST /api/team-settings`
-- **เก็บข้อมูล:** `~/.openclaw-team/settings.json` (encrypted)
+### 2. Team Management (`/teams`) — ✅ CRUD สมบูรณ์
+- **API:** `GET/POST /api/teams`, `PATCH/DELETE /api/teams/[id]`
+- **เก็บข้อมูล:** `~/.openclaw-team/teams.json`
 - **ฟีเจอร์:**
-  - Serper API Key (primary — 2,500 queries/month ฟรี)
-  - SerpApi API Key (fallback — 100 queries/month ฟรี)
-  - ปุ่มทดสอบ connection
-  - Keys ที่ set แล้ว: Serper `...018f`, SerpApi `...a98`
+  - สร้าง/แก้ไข/ลบ teams
+  - เลือก agents เข้า team (multi-select)
+  - ลิงก์ "🔬 Research กับ Team นี้" → ไปหน้า `/research?teamId=xxx`
+- **สถานะจริง:** ยังไม่มี team ที่สร้างไว้ (`teams.json = []`)
 
-### 3. Web Search Integration
-- **API:** `POST /api/team-websearch`
-- **Flow:** Serper → SerpApi fallback → inject ผลค้นหาเป็น context ก่อน agent ตอบ
-- **ใช้งาน:** เฉพาะ agent ที่เปิด `useWebSearch = true` เท่านั้น
-
-### 4. Meeting Room (Research Orchestration)
-- **หน้า:** `/research` — ห้องประชุม AI หลัก
+### 3. Meeting Room / Research (`/research`) — ✅ สมบูรณ์
 - **API:** `POST /api/team-research/stream` (Server-Sent Events)
 - **API ประวัติ:** `GET /api/team-research`, `GET /api/team-research/[id]`
-- **เก็บข้อมูล:** `~/.openclaw-team/research-history.json` (100 sessions ล่าสุด)
+- **เก็บข้อมูล:** `~/.openclaw-team/research-history.json` (27 sessions สะสม)
 - **localStorage:** `research_conversation_v1` — จำ conversation ข้าม refresh
-- **Meeting Flow (ปรับจาก Debate):**
-  1. **Chairman Detection** — ตรวจ role/seniority อัตโนมัติ (CEO > CFO > Director > Manager...)
-  2. **Chairman Opening** — ประธานเปิดประชุม ชี้แจงวัตถุประสงค์และประเด็น
-  3. **Phase 1 — นำเสนอ:** agents พูดตามลำดับ seniority แต่ละคนนำเสนอมุมมองจาก soul/role จริง
-  4. **Phase 2 — อภิปราย:** agents อ่านความเห็นกันแล้วแสดงจุดยืนตาม soul (เห็นด้วย/ไม่เห็นด้วย พร้อมเหตุผล) — ไม่ใช่ index คู่/คี่อีกต่อไป
-  5. **Phase 3 — มติประธาน:** Chairman สรุป ประเด็นที่เห็นพ้อง + ประเด็นขัดแย้ง + มติ + Action Items
-- **Web Search:** agent ที่เปิด useWebSearch จะค้นหาก่อนตอบ — แสดง "ค้นหา..." indicator
-- **Token Optimization — historyMode:**
-  - `full` — inject history ทุกรอบ (default สำหรับ accuracy สูงสุด)
-  - `last3` — inject แค่ 3 รอบล่าสุด (แนะนำ)
-  - `summary` — สรุปย่อ history (ประหยัด token)
-  - `none` — ไม่ inject history (ประหยัดสุด)
-- **Chart Auto-render:** AI embed JSON ใน synthesis → parse และ render Bar/Line/Pie อัตโนมัติ (ไม่ใช้ external lib)
-- **Excel Sheet Selector:** เลือก inject เฉพาะ sheet ที่ต้องการจากไฟล์ Excel
-- **Meeting Minutes Export:** export Markdown รูปแบบรายงานการประชุมจริง (agenda/ความเห็น/มติ/action items)
-- **Follow-up Suggestions:** หลังประชุมแต่ละวาระ แสดง 3 วาระต่อเนื่องที่แนะนำ
-- **Server History Sidebar:** ดูประวัติ sessions เก่าทั้งหมด
+- **Meeting Flow:**
+  1. **Chairman Detection** — ตรวจ role/seniority อัตโนมัติ
+  2. **Chairman Opening** — ประธานเปิดประชุม
+  3. **Phase 1 — นำเสนอ:** agents พูดตามลำดับ seniority
+  4. **Phase 2 — อภิปราย:** agents อ่านความเห็นแล้วแสดงจุดยืนตาม soul
+  5. **Phase 3 — มติประธาน:** Chairman สรุป + Action Items
+- **Data Sources:**
+  - 📎 **File Attachment** — xlsx/pdf/docx/csv/json/txt (max 10MB, 40K chars) + Excel Sheet Selector
+  - 🔌 **MCP per Agent** — agent ที่มี mcpEndpoint จะ fetch `/tools` → เรียก `/call` → inject context
+  - Toggle switch เปิด/ปิด แยกกัน (default: เปิดทั้งคู่)
+- **Web Search:** agent ที่เปิด useWebSearch จะค้นหาก่อนตอบ
+- **Token Optimization — historyMode:** full / last3 / summary / none
+- **Chart Auto-render:** Bar/Line/Pie (ไม่ใช้ external lib)
+- **Meeting Minutes Export:** Markdown รายงานการประชุม
+- **Follow-up Suggestions:** 3 วาระต่อเนื่อง
+- **Server History Sidebar:** ดูประวัติ sessions เก่า
+- **Auto-scroll:** หยุดเมื่อ user scroll ขึ้น + ปุ่ม "⬇ ไปล่างสุด"
 
-### 5. File Attachment (เอกสารอ้างอิง)
-- **API:** `POST /api/team-research/upload`
-- **รองรับ:** xlsx/xls/xlsm, pdf, docx/doc, csv, json, txt/md/log
-- **ขนาดสูงสุด:** 10MB / 40,000 chars context
-- **Excel:** parse ทุก sheet เป็น CSV, มี Sheet Selector เลือก inject เฉพาะบาง sheet
-- **PDF:** pdf-parse (ESM/CJS compat fix)
-- **Word:** mammoth extractRawText
-- **Drag & Drop** + click to upload
-
-### 6. Pixel Office Meeting Room
-- **หน้า:** `/pixel-office-research` — ห้องประชุม pixel art แบบ visual
-- **ฟีเจอร์เดียวกับ `/research`** แต่แสดงบน canvas pixel office:
+### 4. Pixel Office Meeting Room (`/pixel-office-research`) — ✅ สมบูรณ์
+- **ฟีเจอร์เดียวกับ `/research`** แต่แสดงบน canvas pixel art:
+  - Meeting room layout 15×13 tiles พร้อมโต๊ะประชุม เก้าอี้ whiteboard
+  - Agent sprites นั่งรอบโต๊ะ + animation
   - Chairman badge บน agent pill
-  - Web Search indicator ("ค้นหา..." animate)
-  - historyMode selector
-  - Phase labels เป็นภาษาไทย (นำเสนอ / อภิปราย / ประธานสรุปมติ)
-  - Export Minutes
-  - Speech bubbles / floating code snippets / data flow lines บน canvas
+  - Phase labels ภาษาไทย
+  - Speech bubbles / floating code บน canvas
   - Server history panel overlay
+  - localStorage: `pixel_research_conversation_v1`
 
-### 7. Team Management
-- **หน้า:** `/teams` — สร้าง/แก้ไข/ลบ teams
-- **API:** `GET/POST /api/teams`, `PATCH/DELETE /api/teams/[id]`
+### 5. Settings (`/settings`) — ✅ ตั้งค่าแล้ว
+- **Web Search Keys:** Serper + SerpApi (encrypted, บันทึกแล้วบน server)
 
-### 8. Pixel Office
-- **หน้า:** `/pixel-office` — pixel art office พร้อม research bar
+### 6. Web Search Integration — ✅ ทำงานได้
+- **API:** `POST /api/team-websearch`
+- **Flow:** Serper → SerpApi fallback → inject context
 
-### 9. Sidebar Navigation
-- Group "Team":
-  - `👥 Team Agents` → `/agents`
-  - `👫 Teams` → `/teams`
-  - `🔬 Research` → `/research`
-  - `🏛️ Meeting Room` → `/pixel-office-research`
-- Group "Config":
-  - `Skills` → `/skills`
-  - `⚙️ Settings` → `/settings`
+### 7. MCP Integration — ✅ สมบูรณ์ (Phase 4, 2026-04-10)
+- Per-agent MCP config: `mcpEndpoint` + `mcpAccessMode`
+- Test button: `GET /health` → `GET /tools`
+- Tool Selection Scoring: boost analytics tools, penalize search tools
+- `buildToolArguments()` per tool name
+- Direct REST `/call` protocol
 
 ---
 
@@ -110,66 +129,66 @@
 ```
 openclaw-team-dashboard/
 ├── app/
-│   ├── agents/page.tsx              ← Agent CRUD + 19 templates + useWebSearch + seniority
-│   ├── research/page.tsx            ← Meeting Room UI (SSE, charts, file attach, minutes)
-│   ├── pixel-office-research/page.tsx ← Pixel Meeting Room (canvas + same features)
+│   ├── agents/page.tsx              ← Agent CRUD + 19 templates + MCP config (929 lines)
+│   ├── teams/page.tsx               ← Team CRUD + link to research (397 lines)
+│   ├── research/page.tsx            ← Meeting Room UI — SSE, charts, file, MCP (1107 lines)
+│   ├── pixel-office-research/page.tsx ← Pixel Meeting Room (864 lines)
 │   ├── settings/page.tsx            ← Web Search API key settings
-│   ├── teams/page.tsx               ← Team CRUD UI
-│   ├── pixel-office/page.tsx        ← Pixel Office canvas
+│   ├── sidebar.tsx                  ← Navigation (Team / Overview / Monitor / Config groups)
 │   ├── api/
 │   │   ├── team-agents/
-│   │   │   ├── route.ts             (GET list, POST create — รับ useWebSearch, seniority)
+│   │   │   ├── route.ts             (GET list, POST create)
 │   │   │   └── [id]/route.ts        (PATCH update, DELETE)
 │   │   ├── team-models/route.ts     (models per provider)
-│   │   ├── team-settings/route.ts   (GET/POST Serper/SerpApi keys — encrypted)
+│   │   ├── team-settings/route.ts   (GET/POST Web Search keys)
 │   │   ├── team-websearch/route.ts  (POST — Serper→SerpApi fallback)
 │   │   ├── team-research/
 │   │   │   ├── route.ts             (GET history)
 │   │   │   ├── [id]/route.ts        (GET single session)
-│   │   │   ├── stream/route.ts      (POST SSE — Meeting Flow 3 phases + web search + chart)
-│   │   │   └── upload/route.ts      (POST multipart — parse Excel/PDF/Word/CSV/JSON/TXT)
+│   │   │   ├── stream/route.ts      (POST SSE — 3 phases + MCP + web search, 788 lines)
+│   │   │   └── upload/route.ts      (POST multipart — parse files)
 │   │   └── teams/
-│   │       ├── route.ts
-│   │       └── [id]/route.ts
-│   └── sidebar.tsx
+│   │       ├── route.ts             (GET/POST)
+│   │       └── [id]/route.ts        (PATCH/DELETE)
+│   └── ... (หน้าเดิม OpenClaw — จะตัดออก)
 ├── lib/
-│   └── agents-store.ts              ← File-based storage + AES-256 + Settings store
+│   ├── agents-store.ts              ← File-based storage + AES-256 encryption
+│   └── pixel-office/               ← Pixel office engine, sprites, layout
 └── PLAN.md
 ```
 
-### Data Files (บน server)
-```
-~/.openclaw-team/
-├── agents.json           ← agent configs (API keys + useWebSearch + seniority encrypted)
-├── teams.json
-├── settings.json         ← Serper/SerpApi keys (encrypted)
-└── research-history.json ← 100 sessions ล่าสุด
-```
+### Data Files (บน server `~/.openclaw-team/`)
+| File | ขนาด | เนื้อหา |
+|------|------|---------|
+| `agents.json` | 9 agents | configs + encrypted API keys + MCP endpoints |
+| `teams.json` | ว่าง `[]` | team definitions |
+| `settings.json` | 1 entry | Serper + SerpApi keys (encrypted) |
+| `research-history.json` | 27 sessions | ประวัติการประชุม |
 
 ### SSE Events (stream/route.ts)
-| Event | Data | คำอธิบาย |
-|-------|------|---------|
-| `session` | `{sessionId}` | เริ่ม session |
-| `chairman` | `{agentId, name, emoji, role}` | ประกาศประธาน |
-| `status` | `{message}` | สถานะ phase |
-| `agent_start` | `{agentId, isChairman}` | agent เริ่มทำงาน |
-| `agent_searching` | `{agentId, query}` | agent กำลัง web search |
-| `message` | `ResearchMessage` | ข้อความจาก agent |
-| `agent_tokens` | `{agentId, inputTokens, outputTokens, totalTokens}` | token usage |
-| `final_answer` | `{content}` | มติสุดท้าย |
-| `chart_data` | `{type, title, labels, datasets}` | ข้อมูลกราฟ |
-| `follow_up_suggestions` | `{suggestions: string[]}` | วาระต่อเนื่อง 3 ข้อ |
-| `done` | `{sessionId}` | เสร็จสิ้น |
+| Event | Data |
+|-------|------|
+| `session` | `{sessionId}` |
+| `chairman` | `{agentId, name, emoji, role}` |
+| `status` | `{message}` |
+| `agent_start` | `{agentId, isChairman}` |
+| `agent_searching` | `{agentId, query}` |
+| `message` | `ResearchMessage` |
+| `agent_tokens` | `{agentId, inputTokens, outputTokens, totalTokens}` |
+| `final_answer` | `{content}` |
+| `chart_data` | `{type, title, labels, datasets}` |
+| `follow_up_suggestions` | `{suggestions: string[]}` |
+| `done` | `{sessionId}` |
 
-### Providers และ Models ที่รองรับ
-| Provider | Model ตัวอย่าง | API Format |
-|----------|---------------|-----------|
-| Anthropic | Claude Opus/Sonnet/Haiku 4.x | Anthropic SDK |
-| OpenAI | GPT-4o, o1, o3-mini | OpenAI SDK |
-| Gemini | Gemini 2.0 Flash/Pro | Google GenAI SDK |
-| Ollama | Llama 3.2, Mistral, Qwen 2.5 | OpenAI-compatible |
-| OpenRouter | Claude/GPT/Gemini/Llama/DeepSeek | OpenAI-compatible + Bearer |
-| Custom | custom-model | OpenAI-compatible |
+### Providers ที่รองรับ
+| Provider | API Format |
+|----------|-----------|
+| Anthropic | Anthropic SDK |
+| OpenAI | OpenAI SDK |
+| Gemini | Google GenAI SDK |
+| Ollama | OpenAI-compatible |
+| OpenRouter | OpenAI-compatible + Bearer |
+| Custom | OpenAI-compatible |
 
 ---
 
@@ -179,9 +198,8 @@ openclaw-team-dashboard/
 - **Port:** 3001
 - **Repo:** https://github.com/bosocmputer/openclaw-team-dashboard
 
-### Deploy Command (ทำทุกครั้งที่ update)
+### Deploy Command
 ```bash
-# Pull + clean rebuild + copy static + start
 sshpass -p boss123456 ssh -o StrictHostKeyChecking=no bosscatdog@192.168.2.109 "
   kill \$(ss -tlnp 2>/dev/null | grep 3001 | grep -oP 'pid=\K[0-9]+') 2>/dev/null || true
   cd ~/openclaw-team-dashboard && git pull origin main && rm -rf .next && npm run build
@@ -190,28 +208,24 @@ sshpass -p boss123456 ssh -o StrictHostKeyChecking=no bosscatdog@192.168.2.109 "
 "
 ```
 
-> ⚠️ **สำคัญ:** ต้อง `cp -r .next/static .next/standalone/.next/static` ทุกครั้ง ไม่งั้นจะเกิด ChunkLoadError 404
-
-### Save Web Search Keys (ทำครั้งเดียว — บันทึกแล้ว)
-```bash
-curl -X POST http://192.168.2.109:3001/api/team-settings \
-  -H 'content-type: application/json' \
-  -d '{"serperApiKey":"f5e5101f...","serpApiKey":"1e677b3f..."}'
-```
+> ⚠️ **สำคัญ:** ต้อง `cp -r .next/static .next/standalone/.next/static` ทุกครั้ง
 
 ---
 
-## Phase ถัดไป (ยังไม่ได้ทำ)
+## แผนงานถัดไป
 
-### Phase 4 — MCP Per-Agent ✅ สมบูรณ์ (2026-04-10)
-- **Per-agent MCP config:** `mcpEndpoint` + `mcpAccessMode` (admin/sales/purchase/stock/general) ต่อ agent
-- **Test button:** เรียก `GET /health` → `GET /tools` แสดงจำนวน tools พร้อมใช้งาน
-- **Endpoint normalize:** รองรับ `http://ip:3002`, `http://ip:3002/mcp`, มี trailing slash ก็ได้
-- **stream/route.ts:** agent ที่มี mcpEndpoint จะ fetch `/tools` → เรียก `/call` tools ที่ match question (สูงสุด 3 tools) → inject เป็น context ก่อนตอบ
-- **Data Source panel:** ตัด MCP endpoint input + database ออก → เหลือแค่ file attachments + แสดง "📎 เอกสารที่แนบ + 🔌 MCP ตาม Agent"
-- **MCP Protocol:** Direct REST `/call` — `POST {endpoint}/call` + header `mcp-access-mode`
+### Phase 5 — ตัดหน้าที่ไม่ใช้ออก (TODO)
+- ลบหน้า original OpenClaw: `/`, `/pixel-office`, `/models`, `/sessions`, `/stats`, `/alerts`, `/skills`
+- ปรับ sidebar ให้เหลือแค่ 4 หน้าหลัก + Settings
+- ย้าย Settings เข้า sidebar config หรือ modal ใน `/agents`
+- ตั้ง `/agents` หรือ `/research` เป็น landing page
 
-### Phase 5 — Pixel Office Visualization
+### Phase 6 — ปรับปรุง Team ↔ Research Flow
+- เพิ่ม team selector ใน `/research` (เลือกประชุมเฉพาะ agents ใน team)
+- Research filter ด้วย `?teamId=` ให้ทำงานจริง
+- Default team สำหรับ quick research
+
+### Phase 7 — Pixel Office Visualization Enhancement
 - Speech bubbles แบบ real-time บน canvas ระหว่างประชุม
 - Chairman มี crown/highlight พิเศษบน canvas
 - Thinking animation (ฟองอากาศ ...) ตอน web search
@@ -236,3 +250,4 @@ HOME=/custom/path
 5. **historyMode = last3** แนะนำ — balance ระหว่าง context และ token cost
 6. **Chart** ถูก AI embed เป็น ` ```chart ` JSON block ใน synthesis แล้ว parse render inline
 7. **Web Search Keys** บันทึกแล้วบน server: Serper + SerpApi
+8. **MCP Endpoint** — 4 agents เชื่อมต่อ `http://192.168.2.213:3248/sse` (CEO, CFO, CMO, HR)
